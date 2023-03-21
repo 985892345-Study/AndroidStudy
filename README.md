@@ -3,6 +3,10 @@
 
 ## 目录
 - Handler
+  - Looper
+  - MessageQueue
+  - Message
+  - Handler
 - RecyclerView
 - Glide
 - OkHttp
@@ -18,3 +22,14 @@
 - Rxjava
 - LeakCanary
 - EventBus
+
+## 注意事项
+由于注释都是同一种颜色，不好写笔记，所以我使用了 Comments Highlighter 插件用于给不同的注释显示不同的颜色。
+
+我的配置如下：
+```
+Comment
+#         FCAC00
+///       FFD51D
+注意       FF4302
+```
