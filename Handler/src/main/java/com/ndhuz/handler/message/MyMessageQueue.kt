@@ -5,7 +5,6 @@ import com.ndhuz.handler.handler.MyHandler
 import com.ndhuz.handler.looper.MyLooper
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.random.Random
 
 /**
  * 文章推荐：
@@ -485,16 +484,45 @@ class MyMessageQueue(quitAllowed: Boolean) {
   
   
   // 返回 native 层 MessageQueue 的引用地址 (
-  // https://www.jianshu.com/p/57a426b8f145
   private fun nativeInit(): Long {
-    return Random.nextLong()
+    /// 请移步 android_os_MessageQueue.cpp
+    /**
+     * // frameworks/base/core/jni/android_os_MessageQueue.cpp
+     * static jlong android_os_MessageQueue_nativeInit(JNIEnv* env, jclass clazz) {
+     *     // 创建 native 消息队列 NativeMessageQueue
+     *     NativeMessageQueue* nativeMessageQueue = new NativeMessageQueue();
+     *     //...
+     *     // 增加引用计数
+     *     nativeMessageQueue->incStrong(env);
+     *     // 使用 C++ 强制类型转换符 reinterpret_cast 把 NativeMessageQueue 指针强转成 long 类型并返回到 java 层
+     *     return reinterpret_cast<jlong>(nativeMessageQueue);
+     * }
+     *
+     * // 创建 NativeMessageQueue 后会创建 native 层的 Looper
+     * // frameworks/base/core/jni/android_os_MessageQueue.cpp
+     * NativeMessageQueue::NativeMessageQueue() : : mPollEnv(NULL), mPollObj(NULL), mExceptionObj(NULL) {
+     *     // 获取 TLS 中的 Looper (Looper::getForThread 相当于 java层 的 Looper.mLooper 中的 ThreadLocal.get 方法)
+     *     // TLS: C++ 中的线程局部存储，相当于  java 的 ThreadLocal
+     *     mLooper = Looper::getForThread();
+     *     if (mLooper == NULL) {
+     *         // 创建 native 层的 Looper
+     *         mLooper = new Looper(false);
+     *         // 保存 Looper 到 TLS 中 (Looper::setForThread 相当于 java 层的 ThreadLocal.set 方法)
+     *         Looper::setForThread(mLooper);
+     *     }
+     * }
+     */
+    return 1
   }
   
   // 唤醒 native 层的 MessageQueue
   private fun nativeWake(ptr: Long) {
-    // Handler的阻塞唤醒机制是基于Linux的阻塞唤醒机制。
-    // 这个机制也是类似于handler机制的模式。
-    // 在本地创建一个文件描述符，然后需要等待的一方则监听这个文件描述符，唤醒的一方只需要修改这个文件，那么等待的一方就会收到文件从而打破唤醒。
+    // # Handler 的阻塞唤醒机制基于 Linux 的 epoll 机制实现。
+    // https://www.jianshu.com/p/57a426b8f145
+    // # 创建 java 层的 MessageQueue 时就会创建对应 native 层的 NativeMessageQueue，并返回自身地址(mPtr)用于后面使用
+    // # 创建 NativeMessageQueue 时也会创建 native 层的 Looper
+    // # 创建 Looper 时会通过管道与 epoll 机制建立一套 native 层的消息机制
+    
   }
   
   // 用于等待执行下一条消息
