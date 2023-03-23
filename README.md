@@ -36,8 +36,8 @@ Comment
 ```
 在配置成功后你的注释应该是下面这种颜色(除了代码原有的字体颜色不一样外)：
 
-<img src="doce/img/img_annotation_color.png" width="240" />
+<img src="doce/img/img_annotation_color.png" width="600" />
 
 因为 cpp 文件未导入进行编译，所以需要开启此选项才能在 cpp 里面看到特殊注释
 
-<img src="doce/img/img_annotation_color_cpp.png" width="240" />
+<img src="doce/img/img_annotation_color_cpp.png" width="360" />

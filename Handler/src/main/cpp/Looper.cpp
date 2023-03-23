@@ -18,39 +18,17 @@
 #include <utils/Looper.h>
 #include <sys/eventfd.h>
 #include <cinttypes>
-namespace android {
-namespace {
-constexpr uint64_t WAKE_EVENT_FD_SEQ = 1;
-epoll_event createEpollEvent(uint32_t events, uint64_t seq) {
-    return {.events = events, .data = {.u64 = seq}};
-}
-}  // namespace
-// --- WeakMessageHandler ---
-WeakMessageHandler::WeakMessageHandler(const wp<MessageHandler>& handler) :
-        mHandler(handler) {
-}
-WeakMessageHandler::~WeakMessageHandler() {
-}
-void WeakMessageHandler::handleMessage(const Message& message) {
-    sp<MessageHandler> handler = mHandler.promote();
-    if (handler != nullptr) {
-        handler->handleMessage(message);
-    }
-}
-// --- SimpleLooperCallback ---
-SimpleLooperCallback::SimpleLooperCallback(Looper_callbackFunc callback) :
-        mCallback(callback) {
-}
-SimpleLooperCallback::~SimpleLooperCallback() {
-}
-int SimpleLooperCallback::handleEvent(int fd, int events, void* data) {
-    return mCallback(fd, events, data);
-}
-// --- Looper ---
-// Maximum number of file descriptors for which to retrieve poll events each iteration.
-static const int EPOLL_MAX_EVENTS = 16;
-static pthread_once_t gTLSOnce = PTHREAD_ONCE_INIT;
-static pthread_key_t gTLSKey = 0;
+
+// ......
+/**
+ * #
+ * # 1、native 层的 Looper 跟 java 层的 Handler 类似，有发送、取出、回调消息的作用
+ * # 2、native 层的 Looper 也是一个线程对应一个 Looper，跟 java 层的 Looper 一样
+ * #
+ * #
+ *
+ */
+
 /// native 层 Looper 的构造函数
 Looper::Looper(bool allowNonCallbacks)
     : mAllowNonCallbacks(allowNonCallbacks),
@@ -67,18 +45,8 @@ Looper::Looper(bool allowNonCallbacks)
     /// 2、重建 epoll 事件
     rebuildEpollLocked();
 }
-Looper::~Looper() {
-}
-void Looper::initTLSKey() {
-    int error = pthread_key_create(&gTLSKey, threadDestructor);
-    LOG_ALWAYS_FATAL_IF(error != 0, "Could not allocate TLS key: %s", strerror(error));
-}
-void Looper::threadDestructor(void *st) {
-    Looper* const self = static_cast<Looper*>(st);
-    if (self != nullptr) {
-        self->decStrong((void*)threadDestructor);
-    }
-}
+
+/// 被 NativeMessageQueue::NativeMessageQueue 调用
 void Looper::setForThread(const sp<Looper>& looper) {
     sp<Looper> old = getForThread(); // also has side-effect of initializing TLS
     if (looper != nullptr) {
@@ -89,514 +57,133 @@ void Looper::setForThread(const sp<Looper>& looper) {
         old->decStrong((void*)threadDestructor);
     }
 }
+
+/// NativeMessageQueue::NativeMessageQueue 调用
 sp<Looper> Looper::getForThread() {
     int result = pthread_once(& gTLSOnce, initTLSKey);
     LOG_ALWAYS_FATAL_IF(result != 0, "pthread_once failed");
     Looper* looper = (Looper*)pthread_getspecific(gTLSKey);
     return sp<Looper>::fromExisting(looper);
 }
-sp<Looper> Looper::prepare(int opts) {
-    bool allowNonCallbacks = opts & PREPARE_ALLOW_NON_CALLBACKS;
-    sp<Looper> looper = Looper::getForThread();
-    if (looper == nullptr) {
-        looper = sp<Looper>::make(allowNonCallbacks);
-        Looper::setForThread(looper);
-    }
-    if (looper->getAllowNonCallbacks() != allowNonCallbacks) {
-        ALOGW("Looper already prepared for this thread with a different value for the "
-                "LOOPER_PREPARE_ALLOW_NON_CALLBACKS option.");
-    }
-    return looper;
-}
-bool Looper::getAllowNonCallbacks() const {
-    return mAllowNonCallbacks;
-}
 
 /*
-在Linux中，线程之间的通信一般是通过管道 (pipe)，
-在 rebuildEpollLocked() 方法中，
-首先通过 epoll_create 方法创建一个 epoll 专用文件描述符(mEpollFd)，同时创建了一个管道，
-然后设置监听可读事件类型（EPOLLIN），
-最后通过 epoll_ctl 方法把 Looper 对象中的唤醒事件的文件描述符（mWakeEventFd）添加到epoll文件描述符的监控范围内，
-当 mWakeEventFd 那一端发生了写入，这时 mWakeEventFd 可读，就会被 epoll 监听到（epoll_wait方法返回）
-
-我们发现epoll文件描述符不仅监听了 mWakeEventFd，它还监听了其他的如键盘、鼠标等事件的文件描述符，
-所以一个epoll文件描述符可以监听多个文件描述符。
-*/
+ * # 深入理解 epoll ：
+ * # https://mp.weixin.qq.com/s?__biz=MzUxMjEyNDgyNw==&mid=2247496957&idx=1&sn=3cd57e279181f8ea28066833285fa1c5&
+ * # chksm=f96b8609ce1c0f1f59892e65554626101a90d298df3a845751682116a24fefabb3d2f162497b&
+ * # mpshare=1&scene=23&srcid=0323f9sKTetsHSiHjTkpYc68&sharer_sharetime=1679555631248&sharer_shareid=885dfa789ac8fcaf1dd0fefe3078ae84#rd
+ * #
+ * # 大致描述下如下：
+ * # 把多个文件描述符 fd 放进 epoll 中的监听池(使用红黑树实现，方便快速添加删除)，
+ * # 然后 epoll_ctl 函数会向底层签一个读写回调，在这个文件描述符 fd 可读可写时进行回调，回调后会添加进一个链表中
+ * # 最后 epoll_wait 函数就是挂起函数(挂起时将让出 CPU 调度)，直到回调，回调时将读取链表中的文件描述符 fd
+ * #
+ * # 因为 epoll 能够监听多个 fd，这种叫：IO 多路复用
+ * # 比 Linux 中 select 好的原因有两点：
+ * # 1、epoll 通过向底层签发回调来快速判断哪个 fd 可读可写，而 select 是通过遍历来判断的
+ * # 2、select 上限太小
+ * #
+ */
 /// 重建 epoll 事件，建立起 epoll 机制，通过 epoll 机制监听各种文件描述符
 void Looper::rebuildEpollLocked() {
     // Close old epoll instance if we have one.
     /// 关闭旧的管道
     if (mEpollFd >= 0) {
-#if DEBUG_CALLBACKS
-        ALOGD("%p ~ rebuildEpollLocked - rebuilding epoll set", this);
-#endif
         mEpollFd.reset();
     }
 
-    /// 2、创建一个新的 epoll 文件描述符，并注册 wake 管道
-    // Allocate the new epoll instance and register the WakeEventFd.
+    /// 1、创建一个新的 epoll 文件描述符
     mEpollFd.reset(epoll_create1(EPOLL_CLOEXEC));
-    LOG_ALWAYS_FATAL_IF(mEpollFd < 0, "Could not create epoll instance: %s", strerror(errno));
+    // ...
+    /// 2、设置监听事件为写入事件 (EPOLLIN)
     epoll_event wakeEvent = createEpollEvent(EPOLLIN, WAKE_EVENT_FD_SEQ);
 
-    /// 3、将唤醒事件 fd (mWakeEventFd) 添加到 epoll 文件描述符 (mEpollFd)，并监听唤醒事件 fd (mWakeEventFd)
+    /// 3、将唤醒事件 fd (mWakeEventFd) 添加到 epoll 文件描述符 (mEpollFd) 中
     int result = epoll_ctl(mEpollFd.get(), EPOLL_CTL_ADD, mWakeEventFd.get(), &wakeEvent);
-    LOG_ALWAYS_FATAL_IF(result != 0, "Could not add wake event fd to epoll instance: %s",
-                        strerror(errno));
+    // ...
+}
 
-    /// 4、将各种事件，如键盘、鼠标等事件的 fd 添加到 epoll 文件描述符 (mEpollFd)，进行监听
-    for (const auto& [seq, request] : mRequests) {
-        epoll_event eventItem = createEpollEvent(request.getEpollEvents(), seq);
-        int epollResult = epoll_ctl(mEpollFd.get(), EPOLL_CTL_ADD, request.fd, &eventItem);
-        if (epollResult < 0) {
-            ALOGE("Error adding epoll events for fd %d while rebuilding epoll set: %s",
-                  request.fd, strerror(errno));
-        }
-    }
-}
-void Looper::scheduleEpollRebuildLocked() {
-    if (!mEpollRebuildRequired) {
-#if DEBUG_CALLBACKS
-        ALOGD("%p ~ scheduleEpollRebuildLocked - scheduling epoll set rebuild", this);
-#endif
-        mEpollRebuildRequired = true;
-        wake();
-    }
-}
+/// 被 NativeMessageQueue::pollOnce 调用
 int Looper::pollOnce(int timeoutMillis, int* outFd, int* outEvents, void** outData) {
     int result = 0;
     for (;;) {
-        while (mResponseIndex < mResponses.size()) {
-            const Response& response = mResponses.itemAt(mResponseIndex++);
-            int ident = response.request.ident;
-            if (ident >= 0) {
-                int fd = response.request.fd;
-                int events = response.events;
-                void* data = response.request.data;
-#if DEBUG_POLL_AND_WAKE
-                ALOGD("%p ~ pollOnce - returning signalled identifier %d: "
-                        "fd=%d, events=0x%x, data=%p",
-                        this, ident, fd, events, data);
-#endif
-                if (outFd != nullptr) *outFd = fd;
-                if (outEvents != nullptr) *outEvents = events;
-                if (outData != nullptr) *outData = data;
-                return ident;
-            }
-        }
+        // ...
         if (result != 0) {
-#if DEBUG_POLL_AND_WAKE
-            ALOGD("%p ~ pollOnce - returning result %d", this, result);
-#endif
-            if (outFd != nullptr) *outFd = 0;
-            if (outEvents != nullptr) *outEvents = 0;
-            if (outData != nullptr) *outData = nullptr;
+            // ...
+            /// 跳出循环
             return result;
         }
+        /// 处理内部轮询
         result = pollInner(timeoutMillis);
     }
 }
+
+/// 被 Looper::pollOnce 调用
 int Looper::pollInner(int timeoutMillis) {
-#if DEBUG_POLL_AND_WAKE
-    ALOGD("%p ~ pollOnce - waiting: timeoutMillis=%d", this, timeoutMillis);
-#endif
-    // Adjust the timeout based on when the next message is due.
-    if (timeoutMillis != 0 && mNextMessageUptime != LLONG_MAX) {
-        nsecs_t now = systemTime(SYSTEM_TIME_MONOTONIC);
-        int messageTimeoutMillis = toMillisecondTimeoutDelay(now, mNextMessageUptime);
-        if (messageTimeoutMillis >= 0
-                && (timeoutMillis < 0 || messageTimeoutMillis < timeoutMillis)) {
-            timeoutMillis = messageTimeoutMillis;
-        }
-#if DEBUG_POLL_AND_WAKE
-        ALOGD("%p ~ pollOnce - next message in %" PRId64 "ns, adjusted timeout: timeoutMillis=%d",
-                this, mNextMessageUptime - now, timeoutMillis);
-#endif
-    }
-    // Poll.
-    int result = POLL_WAKE;
-    mResponses.clear();
-    mResponseIndex = 0;
-    // We are about to idle.
-    mPolling = true;
+    // ...
+    /// epoll 的事件集合
     struct epoll_event eventItems[EPOLL_MAX_EVENTS];
+    /// 休眠直到有 fd 可读发生
     int eventCount = epoll_wait(mEpollFd.get(), eventItems, EPOLL_MAX_EVENTS, timeoutMillis);
-    // No longer idling.
-    mPolling = false;
-    // Acquire lock.
+
+    // ...
+
+    /// 获取锁
     mLock.lock();
-    // Rebuild epoll set if needed.
-    if (mEpollRebuildRequired) {
-        mEpollRebuildRequired = false;
-        rebuildEpollLocked();
-        goto Done;
-    }
-    // Check for poll error.
-    if (eventCount < 0) {
-        if (errno == EINTR) {
-            goto Done;
-        }
-        ALOGW("Poll failed with an unexpected error: %s", strerror(errno));
-        result = POLL_ERROR;
-        goto Done;
-    }
-    // Check for poll timeout.
-    if (eventCount == 0) {
-#if DEBUG_POLL_AND_WAKE
-        ALOGD("%p ~ pollOnce - timeout", this);
-#endif
-        result = POLL_TIMEOUT;
-        goto Done;
-    }
-    // Handle all events.
-#if DEBUG_POLL_AND_WAKE
-    ALOGD("%p ~ pollOnce - handling events from %d fds", this, eventCount);
-#endif
+
+    // ... 这里会检查是否出错，出错就直接 goto Done
+
+    /// 处理可读的 fd
     for (int i = 0; i < eventCount; i++) {
         const SequenceNumber seq = eventItems[i].data.u64;
         uint32_t epollEvents = eventItems[i].events;
         if (seq == WAKE_EVENT_FD_SEQ) {
+            /// 如果是唤醒的 fd
             if (epollEvents & EPOLLIN) {
                 awoken();
             } else {
                 ALOGW("Ignoring unexpected epoll events 0x%x on wake event fd.", epollEvents);
             }
         } else {
-            const auto& request_it = mRequests.find(seq);
-            if (request_it != mRequests.end()) {
-                const auto& request = request_it->second;
-                int events = 0;
-                if (epollEvents & EPOLLIN) events |= EVENT_INPUT;
-                if (epollEvents & EPOLLOUT) events |= EVENT_OUTPUT;
-                if (epollEvents & EPOLLERR) events |= EVENT_ERROR;
-                if (epollEvents & EPOLLHUP) events |= EVENT_HANGUP;
-                mResponses.push({.seq = seq, .events = events, .request = request});
-            } else {
-                ALOGW("Ignoring unexpected epoll events 0x%x for sequence number %" PRIu64
-                      " that is no longer registered.",
-                      epollEvents, seq);
-            }
+            // ... 其他 fd
         }
     }
 Done: ;
-    // Invoke pending message callbacks.
     mNextMessageUptime = LLONG_MAX;
+    /// mMessageEnvelopes 是一个 vector，里面保存着消息队列 (源码在 Looper.h 中，但不是很重要，所以就不展示)
     while (mMessageEnvelopes.size() != 0) {
         nsecs_t now = systemTime(SYSTEM_TIME_MONOTONIC);
+        /// MessageEnvelop 有收件人 Handler 和消息内容 Message
         const MessageEnvelope& messageEnvelope = mMessageEnvelopes.itemAt(0);
         if (messageEnvelope.uptime <= now) {
-            // Remove the envelope from the list.
-            // We keep a strong reference to the handler until the call to handleMessage
-            // finishes.  Then we drop it so that the handler can be deleted *before*
-            // we reacquire our lock.
             { // obtain handler
+                // MessageHandler 也定义在 Looper.h 中
                 sp<MessageHandler> handler = messageEnvelope.handler;
                 Message message = messageEnvelope.message;
                 mMessageEnvelopes.removeAt(0);
                 mSendingMessage = true;
                 mLock.unlock();
-#if DEBUG_POLL_AND_WAKE || DEBUG_CALLBACKS
-                ALOGD("%p ~ pollOnce - sending message: handler=%p, what=%d",
-                        this, handler.get(), message.what);
-#endif
+                /// 回调 native 层的 handler，这里 native 层的 Looper 其实像 java 层的 Handler，可以发送、取出、回调消息
+                /// 但对于休眠和唤醒来说，并没有用到这个 native 层的 MessageHandler，只用到了休眠和唤醒的作用
                 handler->handleMessage(message);
             } // release handler
             mLock.lock();
             mSendingMessage = false;
             result = POLL_CALLBACK;
         } else {
-            // The last message left at the head of the queue determines the next wakeup time.
+            /// 消息没到执行时间就退出循环
             mNextMessageUptime = messageEnvelope.uptime;
             break;
         }
     }
-    // Release lock.
     mLock.unlock();
-    // Invoke all response callbacks.
-    for (size_t i = 0; i < mResponses.size(); i++) {
-        Response& response = mResponses.editItemAt(i);
-        if (response.request.ident == POLL_CALLBACK) {
-            int fd = response.request.fd;
-            int events = response.events;
-            void* data = response.request.data;
-#if DEBUG_POLL_AND_WAKE || DEBUG_CALLBACKS
-            ALOGD("%p ~ pollOnce - invoking fd event callback %p: fd=%d, events=0x%x, data=%p",
-                    this, response.request.callback.get(), fd, events, data);
-#endif
-            // Invoke the callback.  Note that the file descriptor may be closed by
-            // the callback (and potentially even reused) before the function returns so
-            // we need to be a little careful when removing the file descriptor afterwards.
-            int callbackResult = response.request.callback->handleEvent(fd, events, data);
-            if (callbackResult == 0) {
-                AutoMutex _l(mLock);
-                removeSequenceNumberLocked(response.seq);
-            }
-            // Clear the callback reference in the response structure promptly because we
-            // will not clear the response vector itself until the next poll.
-            response.request.callback.clear();
-            result = POLL_CALLBACK;
-        }
-    }
+    // ...
     return result;
 }
-int Looper::pollAll(int timeoutMillis, int* outFd, int* outEvents, void** outData) {
-    if (timeoutMillis <= 0) {
-        int result;
-        do {
-            result = pollOnce(timeoutMillis, outFd, outEvents, outData);
-        } while (result == POLL_CALLBACK);
-        return result;
-    } else {
-        nsecs_t endTime = systemTime(SYSTEM_TIME_MONOTONIC)
-                + milliseconds_to_nanoseconds(timeoutMillis);
-        for (;;) {
-            int result = pollOnce(timeoutMillis, outFd, outEvents, outData);
-            if (result != POLL_CALLBACK) {
-                return result;
-            }
-            nsecs_t now = systemTime(SYSTEM_TIME_MONOTONIC);
-            timeoutMillis = toMillisecondTimeoutDelay(now, endTime);
-            if (timeoutMillis == 0) {
-                return POLL_TIMEOUT;
-            }
-        }
-    }
-}
+
+/// 被 NativeMessageQueue::wake 调用
 void Looper::wake() {
-#if DEBUG_POLL_AND_WAKE
-    ALOGD("%p ~ wake", this);
-#endif
     uint64_t inc = 1;
+    /// 使用 write 向 mWakeEventFd 写入数据，就会立马唤醒 Looper::pollInner 中的 epoll_wait()
     ssize_t nWrite = TEMP_FAILURE_RETRY(write(mWakeEventFd.get(), &inc, sizeof(uint64_t)));
-    if (nWrite != sizeof(uint64_t)) {
-        if (errno != EAGAIN) {
-            LOG_ALWAYS_FATAL("Could not write wake signal to fd %d (returned %zd): %s",
-                             mWakeEventFd.get(), nWrite, strerror(errno));
-        }
-    }
+    // ...
 }
-void Looper::awoken() {
-#if DEBUG_POLL_AND_WAKE
-    ALOGD("%p ~ awoken", this);
-#endif
-    uint64_t counter;
-    TEMP_FAILURE_RETRY(read(mWakeEventFd.get(), &counter, sizeof(uint64_t)));
-}
-int Looper::addFd(int fd, int ident, int events, Looper_callbackFunc callback, void* data) {
-    sp<SimpleLooperCallback> looperCallback;
-    if (callback) {
-        looperCallback = sp<SimpleLooperCallback>::make(callback);
-    }
-    return addFd(fd, ident, events, looperCallback, data);
-}
-int Looper::addFd(int fd, int ident, int events, const sp<LooperCallback>& callback, void* data) {
-#if DEBUG_CALLBACKS
-    ALOGD("%p ~ addFd - fd=%d, ident=%d, events=0x%x, callback=%p, data=%p", this, fd, ident,
-            events, callback.get(), data);
-#endif
-    if (!callback.get()) {
-        if (! mAllowNonCallbacks) {
-            ALOGE("Invalid attempt to set NULL callback but not allowed for this looper.");
-            return -1;
-        }
-        if (ident < 0) {
-            ALOGE("Invalid attempt to set NULL callback with ident < 0.");
-            return -1;
-        }
-    } else {
-        ident = POLL_CALLBACK;
-    }
-    { // acquire lock
-        AutoMutex _l(mLock);
-        // There is a sequence number reserved for the WakeEventFd.
-        if (mNextRequestSeq == WAKE_EVENT_FD_SEQ) mNextRequestSeq++;
-        const SequenceNumber seq = mNextRequestSeq++;
-        Request request;
-        request.fd = fd;
-        request.ident = ident;
-        request.events = events;
-        request.callback = callback;
-        request.data = data;
-        epoll_event eventItem = createEpollEvent(request.getEpollEvents(), seq);
-        auto seq_it = mSequenceNumberByFd.find(fd);
-        if (seq_it == mSequenceNumberByFd.end()) {
-            int epollResult = epoll_ctl(mEpollFd.get(), EPOLL_CTL_ADD, fd, &eventItem);
-            if (epollResult < 0) {
-                ALOGE("Error adding epoll events for fd %d: %s", fd, strerror(errno));
-                return -1;
-            }
-            mRequests.emplace(seq, request);
-            mSequenceNumberByFd.emplace(fd, seq);
-        } else {
-            int epollResult = epoll_ctl(mEpollFd.get(), EPOLL_CTL_MOD, fd, &eventItem);
-            if (epollResult < 0) {
-                if (errno == ENOENT) {
-                    // Tolerate ENOENT because it means that an older file descriptor was
-                    // closed before its callback was unregistered and meanwhile a new
-                    // file descriptor with the same number has been created and is now
-                    // being registered for the first time.  This error may occur naturally
-                    // when a callback has the side-effect of closing the file descriptor
-                    // before returning and unregistering itself.  Callback sequence number
-                    // checks further ensure that the race is benign.
-                    //
-                    // Unfortunately due to kernel limitations we need to rebuild the epoll
-                    // set from scratch because it may contain an old file handle that we are
-                    // now unable to remove since its file descriptor is no longer valid.
-                    // No such problem would have occurred if we were using the poll system
-                    // call instead, but that approach carries other disadvantages.
-#if DEBUG_CALLBACKS
-                    ALOGD("%p ~ addFd - EPOLL_CTL_MOD failed due to file descriptor "
-                            "being recycled, falling back on EPOLL_CTL_ADD: %s",
-                            this, strerror(errno));
-#endif
-                    epollResult = epoll_ctl(mEpollFd.get(), EPOLL_CTL_ADD, fd, &eventItem);
-                    if (epollResult < 0) {
-                        ALOGE("Error modifying or adding epoll events for fd %d: %s",
-                                fd, strerror(errno));
-                        return -1;
-                    }
-                    scheduleEpollRebuildLocked();
-                } else {
-                    ALOGE("Error modifying epoll events for fd %d: %s", fd, strerror(errno));
-                    return -1;
-                }
-            }
-            const SequenceNumber oldSeq = seq_it->second;
-            mRequests.erase(oldSeq);
-            mRequests.emplace(seq, request);
-            seq_it->second = seq;
-        }
-    } // release lock
-    return 1;
-}
-int Looper::removeFd(int fd) {
-    AutoMutex _l(mLock);
-    const auto& it = mSequenceNumberByFd.find(fd);
-    if (it == mSequenceNumberByFd.end()) {
-        return 0;
-    }
-    return removeSequenceNumberLocked(it->second);
-}
-int Looper::removeSequenceNumberLocked(SequenceNumber seq) {
-#if DEBUG_CALLBACKS
-    ALOGD("%p ~ removeFd - fd=%d, seq=%u", this, fd, seq);
-#endif
-    const auto& request_it = mRequests.find(seq);
-    if (request_it == mRequests.end()) {
-        return 0;
-    }
-    const int fd = request_it->second.fd;
-    // Always remove the FD from the request map even if an error occurs while
-    // updating the epoll set so that we avoid accidentally leaking callbacks.
-    mRequests.erase(request_it);
-    mSequenceNumberByFd.erase(fd);
-    int epollResult = epoll_ctl(mEpollFd.get(), EPOLL_CTL_DEL, fd, nullptr);
-    if (epollResult < 0) {
-        if (errno == EBADF || errno == ENOENT) {
-            // Tolerate EBADF or ENOENT because it means that the file descriptor was closed
-            // before its callback was unregistered. This error may occur naturally when a
-            // callback has the side-effect of closing the file descriptor before returning and
-            // unregistering itself.
-            //
-            // Unfortunately due to kernel limitations we need to rebuild the epoll
-            // set from scratch because it may contain an old file handle that we are
-            // now unable to remove since its file descriptor is no longer valid.
-            // No such problem would have occurred if we were using the poll system
-            // call instead, but that approach carries other disadvantages.
-#if DEBUG_CALLBACKS
-            ALOGD("%p ~ removeFd - EPOLL_CTL_DEL failed due to file descriptor "
-                  "being closed: %s",
-                  this, strerror(errno));
-#endif
-            scheduleEpollRebuildLocked();
-        } else {
-            // Some other error occurred.  This is really weird because it means
-            // our list of callbacks got out of sync with the epoll set somehow.
-            // We defensively rebuild the epoll set to avoid getting spurious
-            // notifications with nowhere to go.
-            ALOGE("Error removing epoll events for fd %d: %s", fd, strerror(errno));
-            scheduleEpollRebuildLocked();
-            return -1;
-        }
-    }
-    return 1;
-}
-void Looper::sendMessage(const sp<MessageHandler>& handler, const Message& message) {
-    nsecs_t now = systemTime(SYSTEM_TIME_MONOTONIC);
-    sendMessageAtTime(now, handler, message);
-}
-void Looper::sendMessageDelayed(nsecs_t uptimeDelay, const sp<MessageHandler>& handler,
-        const Message& message) {
-    nsecs_t now = systemTime(SYSTEM_TIME_MONOTONIC);
-    sendMessageAtTime(now + uptimeDelay, handler, message);
-}
-void Looper::sendMessageAtTime(nsecs_t uptime, const sp<MessageHandler>& handler,
-        const Message& message) {
-#if DEBUG_CALLBACKS
-    ALOGD("%p ~ sendMessageAtTime - uptime=%" PRId64 ", handler=%p, what=%d",
-            this, uptime, handler.get(), message.what);
-#endif
-    size_t i = 0;
-    { // acquire lock
-        AutoMutex _l(mLock);
-        size_t messageCount = mMessageEnvelopes.size();
-        while (i < messageCount && uptime >= mMessageEnvelopes.itemAt(i).uptime) {
-            i += 1;
-        }
-        MessageEnvelope messageEnvelope(uptime, handler, message);
-        mMessageEnvelopes.insertAt(messageEnvelope, i, 1);
-        // Optimization: If the Looper is currently sending a message, then we can skip
-        // the call to wake() because the next thing the Looper will do after processing
-        // messages is to decide when the next wakeup time should be.  In fact, it does
-        // not even matter whether this code is running on the Looper thread.
-        if (mSendingMessage) {
-            return;
-        }
-    } // release lock
-    // Wake the poll loop only when we enqueue a new message at the head.
-    if (i == 0) {
-        wake();
-    }
-}
-void Looper::removeMessages(const sp<MessageHandler>& handler) {
-#if DEBUG_CALLBACKS
-    ALOGD("%p ~ removeMessages - handler=%p", this, handler.get());
-#endif
-    { // acquire lock
-        AutoMutex _l(mLock);
-        for (size_t i = mMessageEnvelopes.size(); i != 0; ) {
-            const MessageEnvelope& messageEnvelope = mMessageEnvelopes.itemAt(--i);
-            if (messageEnvelope.handler == handler) {
-                mMessageEnvelopes.removeAt(i);
-            }
-        }
-    } // release lock
-}
-void Looper::removeMessages(const sp<MessageHandler>& handler, int what) {
-#if DEBUG_CALLBACKS
-    ALOGD("%p ~ removeMessages - handler=%p, what=%d", this, handler.get(), what);
-#endif
-    { // acquire lock
-        AutoMutex _l(mLock);
-        for (size_t i = mMessageEnvelopes.size(); i != 0; ) {
-            const MessageEnvelope& messageEnvelope = mMessageEnvelopes.itemAt(--i);
-            if (messageEnvelope.handler == handler
-                    && messageEnvelope.message.what == what) {
-                mMessageEnvelopes.removeAt(i);
-            }
-        }
-    } // release lock
-}
-bool Looper::isPolling() const {
-    return mPolling;
-}
-uint32_t Looper::Request::getEpollEvents() const {
-    uint32_t epollEvents = 0;
-    if (events & EVENT_INPUT) epollEvents |= EPOLLIN;
-    if (events & EVENT_OUTPUT) epollEvents |= EPOLLOUT;
-    return epollEvents;
-}
-MessageHandler::~MessageHandler() { }
-LooperCallback::~LooperCallback() { }
-} // namespace android

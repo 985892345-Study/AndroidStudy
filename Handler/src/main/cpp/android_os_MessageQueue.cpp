@@ -27,70 +27,7 @@
 
 #include "core_jni_helpers.h"
 
-namespace android {
-
-static struct {
-    jfieldID mPtr;   // native object attached to the DVM MessageQueue
-    jmethodID dispatchEvents;
-} gMessageQueueClassInfo;
-
-// Must be kept in sync with the constants in Looper.FileDescriptorCallback
-static const int CALLBACK_EVENT_INPUT = 1 << 0;
-static const int CALLBACK_EVENT_OUTPUT = 1 << 1;
-static const int CALLBACK_EVENT_ERROR = 1 << 2;
-
-
-class NativeMessageQueue : public MessageQueue, public LooperCallback {
-public:
-    NativeMessageQueue();
-    virtual ~NativeMessageQueue();
-
-    virtual void raiseException(JNIEnv* env, const char* msg, jthrowable exceptionObj);
-
-    void pollOnce(JNIEnv* env, jobject obj, int timeoutMillis);
-    void wake();
-    void setFileDescriptorEvents(int fd, int events);
-
-    virtual int handleEvent(int fd, int events, void* data);
-
-    /**
-     * A simple proxy that holds a weak reference to a looper callback.
-     */
-    class WeakLooperCallback : public LooperCallback {
-    protected:
-        virtual ~WeakLooperCallback();
-
-    public:
-        WeakLooperCallback(const wp<LooperCallback>& callback);
-        virtual int handleEvent(int fd, int events, void* data);
-
-    private:
-        wp<LooperCallback> mCallback;
-    };
-
-private:
-    JNIEnv* mPollEnv;
-    jobject mPollObj;
-    jthrowable mExceptionObj;
-};
-
-
-MessageQueue::MessageQueue() {
-}
-
-MessageQueue::~MessageQueue() {
-}
-
-bool MessageQueue::raiseAndClearException(JNIEnv* env, const char* msg) {
-    if (env->ExceptionCheck()) {
-        jthrowable exceptionObj = env->ExceptionOccurred();
-        env->ExceptionClear();
-        raiseException(env, msg, exceptionObj);
-        env->DeleteLocalRef(exceptionObj);
-        return true;
-    }
-    return false;
-}
+// ......
 
 /// NativeMessageQueue 构造方法
 NativeMessageQueue::NativeMessageQueue() :
@@ -106,111 +43,22 @@ NativeMessageQueue::NativeMessageQueue() :
     }
 }
 
-NativeMessageQueue::~NativeMessageQueue() {
-}
-
-void NativeMessageQueue::raiseException(JNIEnv* env, const char* msg, jthrowable exceptionObj) {
-    if (exceptionObj) {
-        if (mPollEnv == env) {
-            if (mExceptionObj) {
-                env->DeleteLocalRef(mExceptionObj);
-            }
-            mExceptionObj = jthrowable(env->NewLocalRef(exceptionObj));
-            ALOGE("Exception in MessageQueue callback: %s", msg);
-            jniLogException(env, ANDROID_LOG_ERROR, LOG_TAG, exceptionObj);
-        } else {
-            ALOGE("Exception: %s", msg);
-            jniLogException(env, ANDROID_LOG_ERROR, LOG_TAG, exceptionObj);
-            LOG_ALWAYS_FATAL("raiseException() was called when not in a callback, exiting.");
-        }
-    }
-}
-
+/// 被 android_os_MessageQueue_nativePollOnce() 调用
 void NativeMessageQueue::pollOnce(JNIEnv* env, jobject pollObj, int timeoutMillis) {
-    mPollEnv = env;
-    mPollObj = pollObj;
+    // ...
+    /// 调用 Looper 的 pollOnce 方法，里面会休眠
+    // 这里调用的是 Looper.h 中的 inline int pollOnce(int) ，最后会调用 pollOnce(timeoutMillis, NULL, NULL, NULL)
     mLooper->pollOnce(timeoutMillis);
-    mPollObj = NULL;
-    mPollEnv = NULL;
-
-    if (mExceptionObj) {
-        env->Throw(mExceptionObj);
-        env->DeleteLocalRef(mExceptionObj);
-        mExceptionObj = NULL;
-    }
+    // ...
 }
 
+/// 被 android_os_MessageQueue_nativeWake() 调用
 void NativeMessageQueue::wake() {
+    /// 调用 Looper::wake
     mLooper->wake();
 }
 
-void NativeMessageQueue::setFileDescriptorEvents(int fd, int events) {
-    if (events) {
-        int looperEvents = 0;
-        if (events & CALLBACK_EVENT_INPUT) {
-            looperEvents |= Looper::EVENT_INPUT;
-        }
-        if (events & CALLBACK_EVENT_OUTPUT) {
-            looperEvents |= Looper::EVENT_OUTPUT;
-        }
-        mLooper->addFd(fd, Looper::POLL_CALLBACK, looperEvents,
-                sp<WeakLooperCallback>::make(this),
-                reinterpret_cast<void*>(events));
-    } else {
-        mLooper->removeFd(fd);
-    }
-}
-
-int NativeMessageQueue::handleEvent(int fd, int looperEvents, void* data) {
-    int events = 0;
-    if (looperEvents & Looper::EVENT_INPUT) {
-        events |= CALLBACK_EVENT_INPUT;
-    }
-    if (looperEvents & Looper::EVENT_OUTPUT) {
-        events |= CALLBACK_EVENT_OUTPUT;
-    }
-    if (looperEvents & (Looper::EVENT_ERROR | Looper::EVENT_HANGUP | Looper::EVENT_INVALID)) {
-        events |= CALLBACK_EVENT_ERROR;
-    }
-    int oldWatchedEvents = reinterpret_cast<intptr_t>(data);
-    int newWatchedEvents = mPollEnv->CallIntMethod(mPollObj,
-            gMessageQueueClassInfo.dispatchEvents, fd, events);
-    if (!newWatchedEvents) {
-        return 0; // unregister the fd
-    }
-    if (newWatchedEvents != oldWatchedEvents) {
-        setFileDescriptorEvents(fd, newWatchedEvents);
-    }
-    return 1;
-}
-
-
-// --- NativeMessageQueue::WeakLooperCallback ---
-
-NativeMessageQueue::WeakLooperCallback::WeakLooperCallback(const wp<LooperCallback>& callback) :
-        mCallback(callback) {
-}
-
-NativeMessageQueue::WeakLooperCallback::~WeakLooperCallback() {
-}
-
-int NativeMessageQueue::WeakLooperCallback::handleEvent(int fd, int events, void* data) {
-    sp<LooperCallback> callback = mCallback.promote();
-    if (callback != nullptr) {
-        return callback->handleEvent(fd, events, data);
-    }
-    return 0;
-}
-
-
-// ----------------------------------------------------------------------------
-
-sp<MessageQueue> android_os_MessageQueue_getMessageQueue(JNIEnv* env, jobject messageQueueObj) {
-    jlong ptr = env->GetLongField(messageQueueObj, gMessageQueueClassInfo.mPtr);
-    return reinterpret_cast<NativeMessageQueue*>(ptr);
-}
-
-/// 对应 java 层 MessageQueue 的 nativeInit() 方法
+/// 被 java 层 MessageQueue 的 nativeInit() 方法调用
 static jlong android_os_MessageQueue_nativeInit(JNIEnv* env, jclass clazz) {
     /// 创建 native 消息队列 NativeMessageQueue
     NativeMessageQueue* nativeMessageQueue = new NativeMessageQueue();
@@ -224,56 +72,25 @@ static jlong android_os_MessageQueue_nativeInit(JNIEnv* env, jclass clazz) {
     return reinterpret_cast<jlong>(nativeMessageQueue); // //使用 C++ 强制类型转换符 reinterpret_cast
 }
 
+/// 被 java 层 MessageQueue 的 nativeDestroy() 方法调用
 static void android_os_MessageQueue_nativeDestroy(JNIEnv* env, jclass clazz, jlong ptr) {
     NativeMessageQueue* nativeMessageQueue = reinterpret_cast<NativeMessageQueue*>(ptr);
     nativeMessageQueue->decStrong(env);
 }
 
+/// 被 java 层 MessageQueue 的 nativePollOnce(long) 方法调用
 static void android_os_MessageQueue_nativePollOnce(JNIEnv* env, jobject obj,
         jlong ptr, jint timeoutMillis) {
+    /// ptr 是 java 层 MessageQueue传过来的 NativeMessageQueue 的地址
     NativeMessageQueue* nativeMessageQueue = reinterpret_cast<NativeMessageQueue*>(ptr);
+    /// 调用 NativeMessageQueue::pollOnce
     nativeMessageQueue->pollOnce(env, obj, timeoutMillis);
 }
 
+/// 被 java 层 MessageQueue 的 nativeWake(long) 方法调用
 static void android_os_MessageQueue_nativeWake(JNIEnv* env, jclass clazz, jlong ptr) {
+    /// ptr 是 java 层 MessageQueue传过来的 NativeMessageQueue 的地址
     NativeMessageQueue* nativeMessageQueue = reinterpret_cast<NativeMessageQueue*>(ptr);
+    /// 调用 NativeMessageQueue::wake
     nativeMessageQueue->wake();
 }
-
-static jboolean android_os_MessageQueue_nativeIsPolling(JNIEnv* env, jclass clazz, jlong ptr) {
-    NativeMessageQueue* nativeMessageQueue = reinterpret_cast<NativeMessageQueue*>(ptr);
-    return nativeMessageQueue->getLooper()->isPolling();
-}
-
-static void android_os_MessageQueue_nativeSetFileDescriptorEvents(JNIEnv* env, jclass clazz,
-        jlong ptr, jint fd, jint events) {
-    NativeMessageQueue* nativeMessageQueue = reinterpret_cast<NativeMessageQueue*>(ptr);
-    nativeMessageQueue->setFileDescriptorEvents(fd, events);
-}
-
-// ----------------------------------------------------------------------------
-
-static const JNINativeMethod gMessageQueueMethods[] = {
-    /* name, signature, funcPtr */
-    { "nativeInit", "()J", (void*)android_os_MessageQueue_nativeInit },
-    { "nativeDestroy", "(J)V", (void*)android_os_MessageQueue_nativeDestroy },
-    { "nativePollOnce", "(JI)V", (void*)android_os_MessageQueue_nativePollOnce },
-    { "nativeWake", "(J)V", (void*)android_os_MessageQueue_nativeWake },
-    { "nativeIsPolling", "(J)Z", (void*)android_os_MessageQueue_nativeIsPolling },
-    { "nativeSetFileDescriptorEvents", "(JII)V",
-            (void*)android_os_MessageQueue_nativeSetFileDescriptorEvents },
-};
-
-int register_android_os_MessageQueue(JNIEnv* env) {
-    int res = RegisterMethodsOrDie(env, "android/os/MessageQueue", gMessageQueueMethods,
-                                   NELEM(gMessageQueueMethods));
-
-    jclass clazz = FindClassOrDie(env, "android/os/MessageQueue");
-    gMessageQueueClassInfo.mPtr = GetFieldIDOrDie(env, clazz, "mPtr", "J");
-    gMessageQueueClassInfo.dispatchEvents = GetMethodIDOrDie(env, clazz,
-            "dispatchEvents", "(II)I");
-
-    return res;
-}
-
-} // namespace android

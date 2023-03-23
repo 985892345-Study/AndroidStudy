@@ -3,7 +3,8 @@ package com.ndhuz.handler
 import com.ndhuz.handler.looper.MyLooper
 
 /**
- * .
+ *
+ * https://blog.csdn.net/hzwailll/article/details/85339714
  *
  * @author 985892345
  * 2023/3/20 22:34
