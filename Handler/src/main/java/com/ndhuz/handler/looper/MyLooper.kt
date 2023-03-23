@@ -1,6 +1,7 @@
 package com.ndhuz.handler.looper
 
 import com.ndhuz.handler.message.MyMessageQueue
+import com.ndhuz.java.thread.MyThreadLocal
 
 /**
  * .
@@ -14,7 +15,7 @@ class MyLooper(quitAllowed: Boolean) {
   companion object {
   
     /**
-     * # ThreadLocal https://juejin.cn/post/7126708538440679460
+     * 可看 [MyThreadLocal] 源码仿写
      */
     private val sThreadLocal = ThreadLocal<MyLooper>()
     private var sMainLooper: MyLooper? = null // 主线程的 Looper

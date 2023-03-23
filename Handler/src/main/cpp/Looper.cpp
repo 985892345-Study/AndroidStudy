@@ -6,7 +6,7 @@
 // A looper implementation based on epoll().
 //
 #define LOG_TAG "Looper"
-//#define LOG_NDEBUG 0
+// #define LOG_NDEBUG 0
 // Debugs poll and wake interactions.
 #ifndef DEBUG_POLL_AND_WAKE
 #define DEBUG_POLL_AND_WAKE 0
@@ -21,11 +21,11 @@
 
 // ......
 /**
- * #
- * # 1、native 层的 Looper 跟 java 层的 Handler 类似，有发送、取出、回调消息的作用
- * # 2、native 层的 Looper 也是一个线程对应一个 Looper，跟 java 层的 Looper 一样
- * #
- * #
+ * //#
+ * //# 1、native 层的 Looper 跟 java 层的 Handler 类似，有发送、取出、回调消息的作用
+ * //# 2、native 层的 Looper 也是一个线程对应一个 Looper，跟 java 层的 Looper 一样
+ * //#
+ * //#
  *
  */
 
@@ -67,21 +67,21 @@ sp<Looper> Looper::getForThread() {
 }
 
 /*
- * # 深入理解 epoll ：
- * # https://mp.weixin.qq.com/s?__biz=MzUxMjEyNDgyNw==&mid=2247496957&idx=1&sn=3cd57e279181f8ea28066833285fa1c5&
- * # chksm=f96b8609ce1c0f1f59892e65554626101a90d298df3a845751682116a24fefabb3d2f162497b&
- * # mpshare=1&scene=23&srcid=0323f9sKTetsHSiHjTkpYc68&sharer_sharetime=1679555631248&sharer_shareid=885dfa789ac8fcaf1dd0fefe3078ae84#rd
- * #
- * # 大致描述下如下：
- * # 把多个文件描述符 fd 放进 epoll 中的监听池(使用红黑树实现，方便快速添加删除)，
- * # 然后 epoll_ctl 函数会向底层签一个读写回调，在这个文件描述符 fd 可读可写时进行回调，回调后会添加进一个链表中
- * # 最后 epoll_wait 函数就是挂起函数(挂起时将让出 CPU 调度)，直到回调，回调时将读取链表中的文件描述符 fd
- * #
- * # 因为 epoll 能够监听多个 fd，这种叫：IO 多路复用
- * # 比 Linux 中 select 好的原因有两点：
- * # 1、epoll 通过向底层签发回调来快速判断哪个 fd 可读可写，而 select 是通过遍历来判断的
- * # 2、select 上限太小
- * #
+ * //# 深入理解 epoll ：
+ * //# https://mp.weixin.qq.com/s?__biz=MzUxMjEyNDgyNw==&mid=2247496957&idx=1&sn=3cd57e279181f8ea28066833285fa1c5&
+ * //# chksm=f96b8609ce1c0f1f59892e65554626101a90d298df3a845751682116a24fefabb3d2f162497b&
+ * //# mpshare=1&scene=23&srcid=0323f9sKTetsHSiHjTkpYc68&sharer_sharetime=1679555631248&sharer_shareid=885dfa789ac8fcaf1dd0fefe3078ae84#rd
+ * //#
+ * //# 大致描述下如下：
+ * //# 把多个文件描述符 fd 放进 epoll 中的监听池(使用红黑树实现，方便快速添加删除)，
+ * //# 然后 epoll_ctl 函数会向底层签一个读写回调，在这个文件描述符 fd 可读可写时进行回调，回调后会添加进一个链表中
+ * //# 最后 epoll_wait 函数就是挂起函数(挂起时将让出 CPU 调度)，直到回调，回调时将读取链表中的文件描述符 fd
+ * //#
+ * //# 因为 epoll 能够监听多个 fd，这种叫：IO 多路复用
+ * //# 比 Linux 中 select 好的原因有两点：
+ * //# 1、epoll 通过向底层签发回调来快速判断哪个 fd 可读可写，而 select 是通过遍历来判断的
+ * //# 2、select 上限太小
+ * //#
  */
 /// 重建 epoll 事件，建立起 epoll 机制，通过 epoll 机制监听各种文件描述符
 void Looper::rebuildEpollLocked() {

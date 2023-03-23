@@ -29,7 +29,7 @@
 
 // ......
 
-/// NativeMessageQueue 构造方法
+/// NativeMessageQueue 构造方法，被 android_os_MessageQueue_nativeInit() 调用
 NativeMessageQueue::NativeMessageQueue() :
         mPollEnv(NULL), mPollObj(NULL), mExceptionObj(NULL) {
     /// 获取 TLS 中的 Looper，TLS 跟 java 的 ThreadLocal 都是线程局部存储

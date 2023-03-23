@@ -29,8 +29,7 @@
 我的配置如下：
 ```
 Comment
-// #         FCAC00
-* #          FCAC00
+//#          FCAC00
 ///          FFD51D
 注意          FF4302
 ```

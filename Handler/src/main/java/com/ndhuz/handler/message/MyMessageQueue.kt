@@ -11,11 +11,11 @@ import kotlin.math.min
  * - https://www.jianshu.com/p/57a426b8f145
  *
  * 思考一下：
- * 1、如果同步屏障后面又是同步屏障会发生什么？
+ * /// 1、如果同步屏障后面又是同步屏障会发生什么？
  * 同步屏障因为在 [MyMessage.isAsynchronous] 返回 false，说明它是一种特殊的同步消息，
  * 所以在遇到第一个同步屏障往后遍历寻找异步消息时会忽略掉第二个同步屏障
  *
- * 2、上面这种情况如果在两个同步屏障后不存在异步消息又会发生什么？
+ * /// 2、上面这种情况如果在两个同步屏障后不存在异步消息又会发生什么？
  * 同步屏障属于一种特殊的同步消息，其实就跟只有一个同步屏障是几乎一样的效果。
  * 在添加异步消息时会唤醒队列
  * 但在 remove 同步屏障时会有所不同，如果 remove 第一个同步屏障，则会因为 next 也是同步屏障而不唤醒队列
@@ -69,10 +69,10 @@ class MyMessageQueue(quitAllowed: Boolean) {
    *
    * 由 [MyLooper.loopOnce] 调用
    *
-   * # 如果当前是屏障消息，则会跳过后面的同步消息，只处理其后的异步消息
-   * # 同步屏障不会自动移除，需要手动移除
-   * # IdleHandler 只会在没有 Message 或者 Message 时间未到时才会执行，且只执行一次(在一次 next 中)。并且是 MessageQueue 执行，而不是返回给 Looper 执行
-   * # 只有 mPtr = 0 和 mQuitting = true 才会返回 null，返回 null 后也会同步的终止 Looper 的死循环
+   * //# 如果当前是屏障消息，则会跳过后面的同步消息，只处理其后的异步消息
+   * //# 同步屏障不会自动移除，需要手动移除
+   * //# IdleHandler 只会在没有 Message 或者 Message 时间未到时才会执行，且只执行一次(在一次 next 中)。并且是 MessageQueue 执行，而不是返回给 Looper 执行
+   * //# 只有 mPtr = 0 和 mQuitting = true 才会返回 null，返回 null 后也会同步的终止 Looper 的死循环
    */
   internal fun next(): MyMessage? {
     val ptr = mPtr
@@ -107,7 +107,7 @@ class MyMessageQueue(quitAllowed: Boolean) {
           * 因为同步屏障在 isAsynchronous() 返回 false，表明它是一种特殊的同步消息
           * */
           /// 这里退出循环是 msg 为第一个异步消息或 null
-          // # 同步屏障就是为了确保异步消息的优先级，设置了屏障后，只能处理其后的异步消息，同步消息会被挡住
+          //# 同步屏障就是为了确保异步消息的优先级，设置了屏障后，只能处理其后的异步消息，同步消息会被挡住
         }
         
         /// msg 为下一条即将执行的消息，可能是同步消息，也可能是异步消息
@@ -144,13 +144,13 @@ class MyMessageQueue(quitAllowed: Boolean) {
         /// 只有没有到达 msg 执行的时间或者 msg 为 null 时才能到这一步
         
         // 如果是第一次执行 IdleHandler ，则保存 IdlerHandler 数量
-        // # IdleHandler 仅在队列为空或队列中的第一条消息（可能是屏障）将在未来处理时运行
+        //# IdleHandler 仅在队列为空或队列中的第一条消息（可能是屏障）将在未来处理时运行
         if (pendingIdleHandlerCount < 0 && (mMessages == null || now < mMessages!!.`when`)) {
           pendingIdleHandlerCount = mIdleHandlers.size
         }
         if (pendingIdleHandlerCount <= 0) {
           /// 如果 pendingIdleHandlerCount = 0 说明已经执行过 IdleHandler 了
-          // # 之后分为两种情况，如果 nextPollTimeoutMillis > 0: 休眠一会; < 0: 无限休眠; 不存在等于 0 的情况
+          //# 之后分为两种情况，如果 nextPollTimeoutMillis > 0: 休眠一会; < 0: 无限休眠; 不存在等于 0 的情况
           // 没有要处理的 IdleHandler，就跳到下一次循环
           mBlocked = true
           return@synchronized /// 源码中这里是直接 continue 到下一次循环
@@ -281,10 +281,10 @@ class MyMessageQueue(quitAllowed: Boolean) {
   /**
    * 添加同步屏障
    *
-   * # 同步屏障是强制性插入的，不经过 Handler
-   * # 添加同步屏障的位置在 ViewRootImpl.scheduleTraversals() todo 之后写到 ViewRootImpl 时补充
-   * # 添加同步屏障会返回对应的 token，用于后期进行遍历比对删除
-   * # 添加屏障不会唤醒队列
+   * //# 同步屏障是强制性插入的，不经过 Handler
+   * //# 添加同步屏障的位置在 ViewRootImpl.scheduleTraversals() todo 之后写到 ViewRootImpl 时补充
+   * //# 添加同步屏障会返回对应的 token，用于后期进行遍历比对删除
+   * //# 添加屏障不会唤醒队列
    */
   internal fun postSyncBarrier(): Int {
     return postSyncBarrier(SystemClock.uptimeMillis())
@@ -323,8 +323,8 @@ class MyMessageQueue(quitAllowed: Boolean) {
   /**
    * 移除同步屏障
    *
-   * # 根据之前 [postSyncBarrier] 返回的 token 来从头遍历移除同步屏障
-   * # 如果移除的同步屏障就是队列头时就唤醒消息队列
+   * //# 根据之前 [postSyncBarrier] 返回的 token 来从头遍历移除同步屏障
+   * //# 如果移除的同步屏障就是队列头时就唤醒消息队列
    */
   private fun removeSyncBarrier(token: Int) {
     synchronized(this) {
@@ -357,13 +357,12 @@ class MyMessageQueue(quitAllowed: Boolean) {
       }
     }
   }
-  
   /**
    * 添加 Message
    *
-   * # 相同时间执行的消息会添加在最前面
-   * # 如果新添加的 Message 会被放在队列头时，是否唤醒取决于当前是否休眠
-   * # 如果队列头的 Message 是同步屏障，则根据后面是否存在异步消息决定是否唤醒，存在时不唤醒
+   * //# 相同时间执行的消息会添加在最前面
+   * //# 如果新添加的 Message 会被放在队列头时，是否唤醒取决于当前是否休眠
+   * //# 如果队列头的 Message 是同步屏障，则根据后面是否存在异步消息决定是否唤醒，存在时不唤醒
    */
   internal fun enqueueMessage(msg: MyMessage, `when`: Long): Boolean {
     if (msg.target == null) {
@@ -492,11 +491,11 @@ class MyMessageQueue(quitAllowed: Boolean) {
   // 唤醒 native 层的 MessageQueue
   private fun nativeWake(ptr: Long) {
     /// 请移步 android_os_MessageQueue.cpp: android_os_MessageQueue_nativeWake()
-    // # Handler 的阻塞唤醒机制基于 Linux 的 epoll 机制实现
+    //# Handler 的阻塞唤醒机制基于 Linux 的 epoll 机制实现
     // https://www.jianshu.com/p/57a426b8f145
-    // # 创建 java 层的 MessageQueue 时就会创建对应 native 层的 NativeMessageQueue，并返回自身地址(mPtr)用于后面使用
-    // # 创建 NativeMessageQueue 时也会创建 native 层的 Looper
-    // # 创建 Looper 时会通过管道与 epoll 机制建立一套 native 层的消息机制
+    //# 创建 java 层的 MessageQueue 时就会创建对应 native 层的 NativeMessageQueue，并返回自身地址(mPtr)用于后面使用
+    //# 创建 NativeMessageQueue 时也会创建 native 层的 Looper
+    //# 创建 Looper 时会通过管道与 epoll 机制建立一套 native 层的消息机制
   }
   
   // 用于等待执行下一条消息
@@ -516,9 +515,9 @@ class MyMessageQueue(quitAllowed: Boolean) {
    * 推荐文章：
    * - https://github.com/zhpanvip/AndroidNote/wiki/IdleHandler
    *
-   * # IdleHandler 是 Handler 提供的一种在消息队列空闲时，执行任务的机制
-   * # 当 MessageQueue 当前没有立即需要处理的消息时（消息队列为空，或者消息未到执行时间），会执行 IdleHandler
-   * # 在 Activity 的 onStop 和 onDestroy 的回调由 IdleHandler 调用 todo 待补充
+   * //# IdleHandler 是 Handler 提供的一种在消息队列空闲时，执行任务的机制
+   * //# 当 MessageQueue 当前没有立即需要处理的消息时（消息队列为空，或者消息未到执行时间），会执行 IdleHandler
+   * //# 在 Activity 的 onStop 和 onDestroy 的回调由 IdleHandler 调用 todo 待补充
    *
    */
   interface MyIdleHandler {
