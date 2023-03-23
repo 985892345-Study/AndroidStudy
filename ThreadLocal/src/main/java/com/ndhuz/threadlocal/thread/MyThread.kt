@@ -1,4 +1,4 @@
-package com.ndhuz.java.thread
+package com.ndhuz.threadlocal.thread
 
 /**
  * [Thread]

@@ -77,13 +77,14 @@ sp<Looper> Looper::getForThread() {
  * //# 然后 epoll_ctl 函数会向底层签一个读写回调，在这个文件描述符 fd 可读可写时进行回调，回调后会添加进一个链表中
  * //# 最后 epoll_wait 函数就是挂起函数(挂起时将让出 CPU 调度)，直到回调，回调时将读取链表中的文件描述符 fd
  * //#
- * //# 因为 epoll 能够监听多个 fd，这种叫：IO 多路复用
+ * //# 因为 epoll 能够监听多个 fd，所以叫：IO 多路复用
+ * //#
  * //# 比 Linux 中 select 好的原因有两点：
  * //# 1、epoll 通过向底层签发回调来快速判断哪个 fd 可读可写，而 select 是通过遍历来判断的
  * //# 2、select 上限太小
  * //#
  */
-/// 重建 epoll 事件，建立起 epoll 机制，通过 epoll 机制监听各种文件描述符
+/// (重新)创建 epoll
 void Looper::rebuildEpollLocked() {
     // Close old epoll instance if we have one.
     /// 关闭旧的管道
@@ -114,6 +115,7 @@ int Looper::pollOnce(int timeoutMillis, int* outFd, int* outEvents, void** outDa
         }
         /// 处理内部轮询
         result = pollInner(timeoutMillis);
+        /// 这个循环其实跟 java 层 MessageQueue 的死循环是类似的
     }
 }
 
@@ -163,7 +165,7 @@ Done: ;
                 mSendingMessage = true;
                 mLock.unlock();
                 /// 回调 native 层的 handler，这里 native 层的 Looper 其实像 java 层的 Handler，可以发送、取出、回调消息
-                /// 但对于休眠和唤醒来说，并没有用到这个 native 层的 MessageHandler，只用到了休眠和唤醒的作用
+                /// 但对于休眠和唤醒来说，并没有用到这个 native 层的 MessageHandler
                 handler->handleMessage(message);
             } // release handler
             mLock.lock();

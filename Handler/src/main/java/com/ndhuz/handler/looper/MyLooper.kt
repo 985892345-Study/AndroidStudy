@@ -1,7 +1,7 @@
 package com.ndhuz.handler.looper
 
 import com.ndhuz.handler.message.MyMessageQueue
-import com.ndhuz.java.thread.MyThreadLocal
+import com.ndhuz.threadlocal.thread.MyThreadLocal
 
 /**
  * .

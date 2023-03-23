@@ -1,4 +1,4 @@
-package com.ndhuz.java.thread
+package com.ndhuz.threadlocal.thread
 
 import java.lang.ref.WeakReference
 import kotlin.random.Random
@@ -22,7 +22,7 @@ open class MyThreadLocal<T> {
    * 为什么用自定义的 hashcode，我也不知道，官方只是这样提道：
    * 它消除了相同线程使用连续构造的 ThreadLocal 的常见情况下的冲突，同时在不太常见的情况下保持良好的行为。
    *
-   * 源码中是使用了一个 static 的 AtomicInteger 变量加上一个 int 值，每次调用就多加一次
+   * 源码中是使用了一个 static 的 AtomicInteger 变量加上一个 int 值，每创建一个 ThreadLocal 就多加一次
    */
   private val threadLocalHashCode: Int = Random.nextInt()
   
@@ -72,7 +72,7 @@ open class MyThreadLocal<T> {
   class MyThreadLocalMap {
     
     constructor(firstKey: MyThreadLocal<*>, firstValue: Any?) {
-      table = Array(INITIAL_CAPACITY) { null } // 初始长度为 16
+      table = Array(INITIAL_CAPACITY) { null } // 初始长度为 16，跟 HashMap 一样
       val i = firstKey.threadLocalHashCode and (INITIAL_CAPACITY - 1)
       table[i] = Entry(firstKey, firstValue)
       threshold = INITIAL_CAPACITY * 2 / 3
@@ -106,7 +106,7 @@ open class MyThreadLocal<T> {
     // Entry 数组
     private val table: Array<Entry?>
     
-    // 需要调整 Entry 数组长度的负载系数
+    // 需要扩容 Entry 数组时的长度
     private val threshold: Int
     
     // Entry 数组长度值
@@ -136,6 +136,8 @@ open class MyThreadLocal<T> {
         }
         if (entry.get() == null) {
           /// 已被回收，清理脏数据
+          // 清理过程是遍历 index 后的所有已回收的数据，并同时将之前添加时 hash 冲突的数据往前移动，
+          // 将数据尽量靠拢左侧，减少以后的遍历长度
           expungeStaleEntry(index)
         } else {
           index = nextIndex(index, len)
@@ -168,6 +170,10 @@ open class MyThreadLocal<T> {
         e = tab[i]
       }
       
+      tab[i] = Entry(key, value)
+      size++
+      // ...
+      /// 如果当前长度大于 threshold - threshold / 4，则会进行扩容，每次扩容倍数为 2 倍，与 HashMap 一致
     }
     
     internal fun remove(key: MyThreadLocal<*>) {

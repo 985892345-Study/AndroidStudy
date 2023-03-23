@@ -2,26 +2,28 @@
 用于学习 Android 进阶知识，计划一周干掉一个，能手搓就手搓一遍 :)
 
 ## 目录
-- Handler
+### Android
+- [x][Handler](Handler)
   - Looper
   - MessageQueue
   - Message
   - Handler
-- RecyclerView
-- Glide
-- OkHttp
-- Retrofit
-- LiveData
-- ViewModel
-- ARouter
-- DataBinding
-- ViewRootImpl
-- 绘制
-- 事件分发
-- Coroutines
-- Rxjava
-- LeakCanary
-- EventBus
+- [x][ThreadLocal](ThreadLocal)
+- [ ]RecyclerView
+- [ ]Glide
+- [ ]OkHttp
+- [ ]Retrofit
+- [ ]LiveData
+- [ ]ViewModel
+- [ ]ARouter
+- [ ]DataBinding
+- [ ]ViewRootImpl
+- [ ]绘制
+- [ ]事件分发
+- [ ]Coroutines
+- [ ]Rxjava
+- [ ]LeakCanary
+- [ ]EventBus
 
 ## 注意事项
 由于注释都是同一种颜色，不好写笔记，所以我使用了 Comments Highlighter 插件用于给不同的注释显示不同的颜色。
