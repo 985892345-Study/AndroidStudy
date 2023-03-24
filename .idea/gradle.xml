@@ -12,6 +12,7 @@
             <option value="$PROJECT_DIR$" />
             <option value="$PROJECT_DIR$/FrameWork" />
             <option value="$PROJECT_DIR$/Handler" />
+            <option value="$PROJECT_DIR$/SparseArray" />
             <option value="$PROJECT_DIR$/ThreadLocal" />
             <option value="$PROJECT_DIR$/app" />
           </set>

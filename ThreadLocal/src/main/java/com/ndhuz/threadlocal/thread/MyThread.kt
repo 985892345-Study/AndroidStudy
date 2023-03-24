@@ -20,6 +20,14 @@ class MyThread : Runnable {
     target?.run()
   }
   
+  init {
+    //# InheritableThreadLocal 实现原理就是在 Thread 构造时复制父线程的 inheritableThreadLocals 变量
+    val parentThread = currentThread()
+    if (parentThread.inheritableThreadLocals != null) {
+      inheritableThreadLocals = MyThreadLocal.MyThreadLocalMap(parentThread.inheritableThreadLocals!!)
+    }
+  }
+  
   companion object {
     
     private val mThread = ThreadLocal<MyThread>()

@@ -32,7 +32,7 @@ open class MyThreadLocal<T> {
   
   fun get(): T? {
     val t = MyThread.currentThread()
-    val map = t.threadLocals
+    val map = getMap(t)
     if (map != null) {
       val e = map.getEntry(this)
       if (e != null) {
@@ -46,27 +46,35 @@ open class MyThreadLocal<T> {
   private fun setInitialValue(): T? {
     val value = initialValue()
     val thread = MyThread.currentThread()
-    val map = thread.threadLocals
+    val map = getMap(thread)
     if (map != null) {
       map.set(this, value)
     } else {
-      thread.threadLocals = MyThreadLocalMap(this, value)
+      createMap(thread, value)
     }
     return value
   }
   
   fun set(value: T?) {
     val thread = MyThread.currentThread()
-    val map  = thread.threadLocals
+    val map  = getMap(thread)
     if (map != null) {
       map.set(this, value)
     } else {
-      thread.threadLocals = MyThreadLocalMap(this, value)
+      createMap(thread, value)
     }
   }
   
   fun remove() {
-    MyThread.currentThread().threadLocals?.remove(this)
+    getMap(MyThread.currentThread())?.remove(this)
+  }
+  
+  protected open fun getMap(thread: MyThread): MyThreadLocalMap? {
+    return thread.threadLocals
+  }
+  
+  protected open fun createMap(thread: MyThread, value: T?) {
+    thread.threadLocals = MyThreadLocalMap(this, value)
   }
   
   class MyThreadLocalMap {
@@ -203,7 +211,7 @@ open class MyThreadLocal<T> {
     }
     
     class Entry(
-      val key: MyThreadLocal<*>,
+      key: MyThreadLocal<*>,
       var value: Any?
     ) : WeakReference<MyThreadLocal<*>>(key) // 注意: 这里是继承的 WeakReference
     

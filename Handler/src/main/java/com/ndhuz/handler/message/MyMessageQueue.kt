@@ -508,20 +508,20 @@ class MyMessageQueue(quitAllowed: Boolean) {
   }
   
   /**
-   * 用于发现线程何时将阻塞等待更多消息的回调接口。
+   * 在消息队列空闲的时候处理一些轻量级的工作 (在没有 Message 需要处理时的回调)
    *
    * 推荐文章：
    * - https://github.com/zhpanvip/AndroidNote/wiki/IdleHandler
    *
-   * //# 1、IdleHandler 是 Handler 提供的一种在消息队列空闲时，执行任务的机制
-   * //# 2、当 MessageQueue 当前没有立即需要处理的消息时（消息队列为空，或者消息未到执行时间），会执行 IdleHandler
+   * //# 1、IdleHandler 是 Handler 提供的一种在消息队列空闲时执行任务的机制 (执行时机不可控)
+   * //# 2、当 MessageQueue 当前没有立即需要处理的消息时(消息队列为空，或者消息未到执行时间)，会执行 IdleHandler (但一次 next() 只会执行一次)
    * //# 3、在 Activity 的 onStop 和 onDestroy 的回调由 IdleHandler 调用 todo 待补充
    *
    */
   interface MyIdleHandler {
     /**
-     * 当消息队列用完消息时调用，现在将等待更多消息。返回 true 以保持您的空闲处理程序处于活动状态，返回 false 以将其删除。
-     * 如果队列中仍有待处理的消息，但它们都计划在当前时间之后调度，则可能会调用此方法。
+     * 当消息队列当前没有 Message 需要执行时回调
+     * @return 返回 false 将被删除，下一次就不会再回调
      */
     fun queueIdle(): Boolean
   }
