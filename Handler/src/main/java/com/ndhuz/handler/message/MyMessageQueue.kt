@@ -220,7 +220,7 @@ class MyMessageQueue(quitAllowed: Boolean) {
     
     // 处理 Message
     if (safe) {
-      // 如果是安全终止
+      /// 如果是安全终止，就移除掉大于当前时间执行的 Message
       removeAllFutureMessagesLocked()
     } else {
       // 不是安全终止
@@ -400,7 +400,7 @@ class MyMessageQueue(quitAllowed: Boolean) {
             needWake = false
           }
         }
-        /// 插入 Message，左.when < msg.when <= 右.when
+        /// 插入 Message，左.when <= msg.when < 右.when
         msg.next = p
         prev!!.next = msg
       }

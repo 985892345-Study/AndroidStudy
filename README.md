@@ -9,6 +9,7 @@
   - Message
   - Handler
 - [x] [ThreadLocal](ThreadLocal)
+- [x] [SparseArray](SparseArray)
 - [ ] RecyclerView
 - [ ] Glide
 - [ ] OkHttp

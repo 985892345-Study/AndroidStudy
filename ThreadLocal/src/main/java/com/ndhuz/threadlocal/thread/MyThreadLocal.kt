@@ -80,7 +80,7 @@ open class MyThreadLocal<T> {
   class MyThreadLocalMap {
     
     constructor(firstKey: MyThreadLocal<*>, firstValue: Any?) {
-      table = Array(INITIAL_CAPACITY) { null } // 初始长度为 16，跟 HashMap 一样
+      table = arrayOfNulls(INITIAL_CAPACITY) // 初始长度为 16，跟 HashMap 一样
       val i = firstKey.threadLocalHashCode and (INITIAL_CAPACITY - 1)
       table[i] = Entry(firstKey, firstValue)
       threshold = INITIAL_CAPACITY * 2 / 3
@@ -89,7 +89,7 @@ open class MyThreadLocal<T> {
     constructor(parentMap: MyThreadLocalMap) {
       val parentTable = parentMap.table
       val len = parentTable.size
-      table = Array(len) { null }
+      table = arrayOfNulls(len)
       threshold = len * 2 / 3
       
       for (j in 0 until len) {

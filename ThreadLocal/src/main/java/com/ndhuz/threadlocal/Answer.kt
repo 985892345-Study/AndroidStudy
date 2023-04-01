@@ -17,7 +17,7 @@ package com.ndhuz.threadlocal
  * 2、ThreadLocalMap 包含一个类型为 Entry 的数组，
  * 3、Entry 继承于 WeakReference，保存了 ThreadLocal 对象和 Value 值
  * 4、在调用 ThreadLocal.get() 时，会通过当前所处的 Thread 对象获取 ThreadLocalMap 中 Entry 数组，然后得到 Value 值
- * (在定位 Entry 索引时使用 ThreadLocal 的一个自定义 hash 值来取模获得索引)
+ * (在定位 Entry 索引时使用 ThreadLocal 的一个自定义 hash 值来取模获得索引，如果 hash 冲突则调用 nextInt() 搜索下一个位置)
  *
  *
  * /// 为什么使用弱引用 ?
