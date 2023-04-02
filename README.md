@@ -10,7 +10,7 @@
   - Handler
 - [x] [ThreadLocal](ThreadLocal)
 - [x] [SparseArray](SparseArray)
-- [ ] [ArrayMap](ArrayMap)
+- [x] [ArrayMap](ArrayMap)
 - [ ] RecyclerView
 - [ ] Glide
 - [ ] OkHttp
