@@ -10,6 +10,7 @@
         <option name="modules">
           <set>
             <option value="$PROJECT_DIR$" />
+            <option value="$PROJECT_DIR$/ArrayMap" />
             <option value="$PROJECT_DIR$/FrameWork" />
             <option value="$PROJECT_DIR$/Handler" />
             <option value="$PROJECT_DIR$/SparseArray" />

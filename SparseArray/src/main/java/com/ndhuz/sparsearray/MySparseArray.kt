@@ -4,8 +4,9 @@ import android.util.SparseArray
 import java.util.*
 
 /**
- * 原理：
  * [SparseArray]
+ *
+ * 原理：
  * https://juejin.cn/post/6844903442901630983
  * https://github.com/zhpanvip/AndroidNote/wiki/SparseArray%E5%AE%9E%E7%8E%B0%E5%8E%9F%E7%90%86
  *
@@ -67,6 +68,11 @@ class MySparseArray<E> {
   }
   
   /// 整体逻辑就是把后面 value 不为 DELETED 的往前移动
+  /**
+   * put() 空间不够时会 gc
+   * size() 获取长度时会 gc
+   * keyAt()、ValueAt() 跟索引相关的操作会 gc
+   */
   private fun gc() {
     val n = mSize
     var o = 0
@@ -142,7 +148,7 @@ class MySparseArray<E> {
     if (mGarbage) {
       gc()
     }
-  
+    
     @Suppress("UNCHECKED_CAST")
     return mValues[index] as E
   }
@@ -172,6 +178,24 @@ class MySparseArray<E> {
     
     mSize = 0
     mGarbage = false
+  }
+  
+  /// 如果已知插入的元素比队尾大时调用该方法将性能更好
+  fun append(key: Int, value: E) {
+    /// 当数据需要插入到数组的中间，则调用 put() 来完成
+    if (mSize != 0 && key <= mKeys[mSize - 1]) {
+      put(key, value)
+      return
+    }
+    
+    if (mGarbage && mSize >= mKeys.size) {
+      gc()
+    }
+  
+    /// 否则，将数据直接添加到队尾
+    mKeys = GrowingArrayUtils.append(mKeys, mSize, key)
+    mValues = GrowingArrayUtils.append(mValues, mSize, value)
+    mSize++
   }
   
   fun contentHashCode(): Int {
@@ -226,13 +250,13 @@ class MySparseArray<E> {
     
     fun <T> insert(array: Array<T?>, currentSize: Int, index: Int, element: T): Array<T?> {
       assert(currentSize <= array.size)
-  
+      
       if (currentSize + 1 <= array.size) {
         System.arraycopy(array, index, array, index + 1, currentSize - index)
         array[index] = element
         return array
       }
-  
+      
       /*
       * 官方底层源码调用的
       * ArrayUtils.newUnpaddedArray((Class<T>)array.getClass().getComponentType(), growSize(currentSize))
@@ -244,15 +268,46 @@ class MySparseArray<E> {
       * 应该跟我这种写法相差不大
       * */
       @Suppress("UNCHECKED_CAST")
-      val newArray = java.lang.reflect.Array.newInstance(array::class.java.componentType!!, growSize(currentSize)) as Array<T?>
+      val newArray = java.lang.reflect.Array.newInstance(
+        array::class.java.componentType!!,
+        growSize(currentSize)
+      ) as Array<T?>
       System.arraycopy(array, 0, newArray, 0, index)
       newArray[index] = element
       System.arraycopy(array, index, newArray, index + 1, array.size - index)
       return newArray
     }
     
+    fun append(array: IntArray, currentSize: Int, element: Int): IntArray {
+      assert(currentSize <= array.size)
+      
+      var newArray = array
+      if (currentSize + 1 > array.size) { // 即 currentSize >= array.size
+        newArray = IntArray(growSize(currentSize))
+        System.arraycopy(array, 0, newArray, 0, currentSize)
+      }
+      newArray[currentSize] = element
+      return array
+    }
+    
+    fun <T> append(array: Array<T?>, currentSize: Int, element: T): Array<T?> {
+      assert(currentSize <= array.size)
+      
+      var newArray = array
+      if (currentSize + 1 > array.size) { // 即 currentSize >= array.size
+        @Suppress("UNCHECKED_CAST")
+        newArray = java.lang.reflect.Array.newInstance(
+          array::class.java.componentType!!,
+          growSize(currentSize)
+        ) as Array<T?>
+        System.arraycopy(array, 0, newArray, 0, currentSize)
+      }
+      newArray[currentSize] = element
+      return array
+    }
+    
     private fun growSize(currentSize: Int): Int {
-      /// 二倍扩容，ArrayList 是 1.5 倍 (oldCapacity + (oldCapacity >> 1))
+      /// 二倍扩容，但 ArrayList 是 1.5 倍 (oldCapacity + (oldCapacity >> 1))
       return if (currentSize <= 4) 8 else currentSize * 2
     }
   }
