@@ -28,7 +28,7 @@ class MySparseArray<E> {
   
   private var mSize = 0
   
-  // 默认初始化容量为 10 个，跟 ArrayList 默认容量一致
+  // 默认初始化容量为 10 个，跟 ArrayList 默认容量一致，但是 ArrayList 是懒加载的，只有添加第一个元素后才初始化为 10
   constructor() : this(10)
   
   constructor(initialCapacity: Int) {
@@ -99,6 +99,9 @@ class MySparseArray<E> {
     mSize = o
   }
   
+  /**
+   * //# SparseArray 允许 value 值为 null
+   */
   fun put(key: Int, value: E) {
     var i = ContainerHelpers.binarySearch(mKeys, mSize, key)
     

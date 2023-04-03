@@ -62,7 +62,8 @@ class MyArrayMap<K, V> : MutableMap<K, V> {
     } else {
       nsize = osize - 1
       if (mHashes.size > (BASE_SIZE * 2) && mSize < mHashes.size / 3) {
-        //# 如果 mHashes 实际长度大于 2 倍 BASE_SIZE，mSize 小于 mHashes 实际长度的 3 分之 1，则会收紧容量
+        //# 如果 mHashes 实际长度大于 2 倍 BASE_SIZE，mSize 小于 mHashes 实际长度的 3 分之 1，则会收缩容量
+        //# 大于 2 倍 BASE_SIZE 就收缩为当前长度的 1.5 倍 (比如：mHashes.size = 9，mSize = 2，此时会收缩容量为 8)
         val n = if ((osize > (BASE_SIZE * 2))) osize + (osize shr 1) else BASE_SIZE * 2
         
         val ohashes = mHashes
@@ -99,6 +100,16 @@ class MyArrayMap<K, V> : MutableMap<K, V> {
    * //# 扩容时如果 mSize < 4 将扩容为 4   (原因在于直接使用缓存池)
    * //# 4 <= mSize <= 8 时将扩容至 8    (原因在于直接使用缓存池)
    * //# mSize > 8 时将扩容 1.5 倍 (size + (size >> 1))
+   *
+   * //# ArrayMap 允许 key 和 value 为 null (HashMap 也允许)
+   *                         key         value        线程是否安全
+   * HashTable           不能为 null    不能为 null        安全
+   * ConcurrentHashMap   不能为 null    不能为 null       局部安全
+   * TreeMap             不能为 null       null          不安全
+   * HashMap                null          null          不安全
+   * ArrayMap               null          null          不安全
+   *
+   * ConcurrentHashMap 不允许的原因: https://www.zhihu.com/question/379146959/answer/2474146881
    */
   @Suppress("UNCHECKED_CAST")
   override fun put(key: K, value: V): V? {
