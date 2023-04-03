@@ -96,9 +96,6 @@ class MyArrayMap<K, V> : MutableMap<K, V> {
   }
   
   /**
-   * //# put 新元素时 O(n) 的时间复杂度 (因为 indexOf() 方法采用线性探测法解决 hash 冲突，找不到原本位置的 hash 时将遍历整个数组)
-   * //# put 用来修改旧元素时 O(logn) 的时间复杂度
-   *
    * //# 扩容时如果 mSize < 4 将扩容为 4   (原因在于直接使用缓存池)
    * //# 4 <= mSize <= 8 时将扩容至 8    (原因在于直接使用缓存池)
    * //# mSize > 8 时将扩容 1.5 倍 (size + (size >> 1))
@@ -256,7 +253,7 @@ class MyArrayMap<K, V> : MutableMap<K, V> {
           for (i in (size shl 1) - 1 downTo 2) {
             array[i] = null /// 清空所有 key 和 value 值
           }
-          // 注意：这里并没有清理 hashes 数组
+          // 注意：这里并没有清理 hashes 数组，但是并不会影响使用
           mTwiceBaseCache = array
           mTwiceBaseCacheSize++
         }
@@ -283,6 +280,7 @@ class MyArrayMap<K, V> : MutableMap<K, V> {
     
     if (N == 0) return 0.inv() // 0 取反为 -1
     
+    // 虽然 mHashes 可能是缓存池中的未回收数组，但是这里传入了 N 长度，相当于整个 mHashes 跟空的数组一样
     val index = binarySearchHashes(mHashes, N, hash)
     
     if (index < 0) return index // 未找到 hash 值时将返回负数，取反后为插入位置值
@@ -290,8 +288,6 @@ class MyArrayMap<K, V> : MutableMap<K, V> {
     if (key == mArray[index shl 1]) {
       return index
     }
-    
-    /// 由于 mHashes 被回收时并不会被清理，所以存在 mHashes 有值，但 mArray 却没值
     
     var end = index + 1
     while (end < N && mHashes[end] == hash) {
@@ -309,7 +305,6 @@ class MyArrayMap<K, V> : MutableMap<K, V> {
       i--
     }
     
-    //# 在 put 新元素时这里将遍历整个数组，O(n) 的时间复杂度
     // 彻底没有找到时只能返回 end 的取反值，表示没有找到，取反后还可以表示新元素应该插入的位置
     return end.inv()
   }

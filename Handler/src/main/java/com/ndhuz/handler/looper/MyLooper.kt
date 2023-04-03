@@ -86,7 +86,7 @@ class MyLooper(quitAllowed: Boolean) {
         return false
       }
       
-      // ... 有很多用于回调已经打印 log 的代码
+      // ... 有很多用于回调以及打印 log 的代码
       
       // 除了消息屏障外 target 都不会为 null
       msg.target!!.dispatchMessage(msg) // 这里可能会抛出异常
