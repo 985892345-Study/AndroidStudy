@@ -11,7 +11,7 @@
 - [x] [ThreadLocal](ThreadLocal)
 - [x] [SparseArray](SparseArray)
 - [x] [ArrayMap](ArrayMap)
-- [ ] RecyclerView
+- [ ] [RecyclerView](RecyclerView)
 - [ ] Glide
 - [ ] OkHttp
 - [ ] Retrofit
