@@ -2,33 +2,76 @@
 用于学习 Android 进阶知识，计划一周干掉一个，能手搓就手搓一遍 :)
 
 ## 目录
-### Android
+### 面试必问
 - [x] [Handler](Handler)
   - Looper
+    - [ThreadLocal](ThreadLocal)
   - MessageQueue
-  - Message
-  - Handler
-- [x] [ThreadLocal](ThreadLocal)
-- [x] [SparseArray](SparseArray)
-- [x] [ArrayMap](ArrayMap)
+- [ ] Service
+- [ ] [Binder](Binder) 
+- [ ] Activity
+  - 生命周期
+  - 启动模式
+- [ ] Fragment
+  - 生命周期
+- [ ] 计网
+  - TCP
+  - UDP
+  - Https
+
+### 面试常问
 - [ ] [RecyclerView](RecyclerView)
-- [ ] Glide
+  - 四级缓存
+  - 测量与布局
 - [ ] OkHttp
 - [ ] Retrofit
+- [ ] Glide
+  - 生命周期
+  - 三级缓存
+  - Bitmap 优化
+- [ ] 线程锁
+  - synchronized
+  - ReentrantLock
+  - CAS
+- [ ] 线程池
+  - CachedThreadPool
+  - FixesThreadPool
+  - ScheduledThreadPool
+  - SingleThreadExecutor
+- [ ] JVM
+
+### 集合方面
+- [ ] HashMap
+- [ ] ConcurrentHashMap
+- [x] [SparseArray](SparseArray)
+- [x] [ArrayMap](ArrayMap)
+
+### jetpack
 - [ ] LiveData
 - [ ] ViewModel
-- [ ] ARouter
 - [ ] DataBinding
-- [ ] ViewRootImpl
-- [ ] 绘制
+
+### View 方面
+- [ ] onMeasure, onLayout
+- [ ] onDraw
+- [ ] 动画
+  - 属性动画
+  - 补间动画
+  - 帧动画
 - [ ] 事件分发
+- [ ] CoordinatorLayout
+- [ ] ConstraintLayout
+- [ ] ViewRootImpl
+
+### 其他框架
+- [ ] LeakCanary
+- [ ] ARouter
 - [ ] Coroutines
 - [ ] Rxjava
-- [ ] LeakCanary
 - [ ] EventBus
 
 ## 注意事项
-由于注释都是同一种颜色，不好写笔记，所以我使用了 Comments Highlighter 插件用于给不同的注释显示不同的颜色。
+由于注释都是同一种颜色，不好写笔记，所以我使用了 [Better Highlights](https://plugins.jetbrains.com/plugin/12895-better-highlights) 插件用于给不同的注释显示不同的颜色。
 
 我的配置如下：
 ```

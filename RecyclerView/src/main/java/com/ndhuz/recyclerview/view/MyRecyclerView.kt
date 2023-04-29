@@ -198,6 +198,9 @@ class MyRecyclerView(context: Context, attrs: AttributeSet? = null) : ViewGroup(
     dispatchLayout()
   }
   
+  /**
+   * [RecyclerView.dispatchLayout]
+   */
   private fun dispatchLayout() {
     if (this::mAdapter.isInitialized) return
     if (this::mLayout.isInitialized) return
@@ -232,7 +235,9 @@ class MyRecyclerView(context: Context, attrs: AttributeSet? = null) : ViewGroup(
   /**
    * //# 1、判断是否需要开启动画
    * //# 2、如果开启动画的话就保存旧的 ViewHolder 信息
-   * //# 2、如果是 item 移动动画就调用 LayoutManager.onLayoutChildren() 进行预布局并记录新增的 ViewHolder
+   * //# 3、如果是 item 移动动画就调用 LayoutManager.onLayoutChildren() 进行预布局并记录新增的 ViewHolder
+   *
+   * [RecyclerView.dispatchLayoutStep1]
    */
   private fun dispatchLayoutStep1() {
     // ...
@@ -244,7 +249,7 @@ class MyRecyclerView(context: Context, attrs: AttributeSet? = null) : ViewGroup(
     // ...
     if (mState.mRunSimpleAnimations) {
       repeat(mChildHelper.getChildCount()) {
-        /// 保存旧的 item 信息
+        /// 保存旧的 item 位置信息
       }
     }
     if (mState.mRunPredictiveAnimations) {
@@ -253,7 +258,7 @@ class MyRecyclerView(context: Context, attrs: AttributeSet? = null) : ViewGroup(
       mLayout.onLayoutChildren(mRecycler, mState)
       // ...
       repeat(mChildHelper.getChildCount()) {
-        /// 跟之前的旧信息进行比对，记录新增的 item 信息
+        /// 可能新增了 item，所以这里记录新增的 item 信息
       }
     }
     // ...
@@ -262,6 +267,9 @@ class MyRecyclerView(context: Context, attrs: AttributeSet? = null) : ViewGroup(
   
   /**
    * //# 真正用于布局的方法，会回调 LayoutManager.onLayoutChildren()
+   * //# 正常布局填完屏幕后，如果一级缓存 Scrap 中有多的 ViewHolder，会全部布局上去 (由 LayoutManager 实现)
+   *
+   * [RecyclerView.dispatchLayoutStep2]
    */
   private fun dispatchLayoutStep2() {
     // ...
@@ -272,10 +280,19 @@ class MyRecyclerView(context: Context, attrs: AttributeSet? = null) : ViewGroup(
   
   /**
    * //# 根据 dispatchLayoutStep1() 保存的信息执行动画
-   * //# 该方法不参与实际的布局
+   * //# 执行动画后通知 LayoutManager 回收 dispatchLayoutStep2() 中多布局的 ViewHolder (会回收到二级缓存 mCacheViews 中)
+   *
+   * [RecyclerView.dispatchLayoutStep3]
    */
   private fun dispatchLayoutStep3() {
-    /// 只执行动画
+    if (mState.mRunSimpleAnimations) {
+      repeat(mChildHelper.getChildCount()) {
+        /// 记录当前 item 的位置信息
+        // mViewInfoStore.addToPostLayout(holder, animationInfo);
+      }
+      /// 开始执行动画
+      // mViewInfoStore.process(mViewInfoProcessCallback);
+    }
   }
   
   // 供 MyLayoutManager 调用，因为 setMeasuredDimension() 是 protected

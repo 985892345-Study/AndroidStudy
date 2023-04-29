@@ -70,6 +70,8 @@ abstract class MyLayoutManager {
   /**
    * 测量过程是否交给 RecyclerView 的 AutoMeasure 机制
    *
+   * [LayoutManager.isAutoMeasureEnabled]
+   *
    * @return true -> rv 自己测量; false -> 将交给 LayoutManager 的 [onMeasure] 方法
    */
   open fun isAutoMeasureEnabled(): Boolean {
