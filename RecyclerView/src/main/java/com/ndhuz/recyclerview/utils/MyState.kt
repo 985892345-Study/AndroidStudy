@@ -23,9 +23,12 @@ class MyState {
   // 是否处于预布局
   internal var mInPreLayout = false
   
+  // 需要运行 item 动画 (mRunSimpleAnimations = true) 并且 item 发生了更新操作
+  internal var mTrackOldChangeHolders = false
+  
   enum class LayoutStep {
-    STEP_START,
-    STEP_LAYOUT,
-    STEP_ANIMATIONS
+    STEP_START, // 未布局或布局已完全结束
+    STEP_LAYOUT, // dispatchLayoutStep1 已经执行完
+    STEP_ANIMATIONS // dispatchLayoutStep2 已经执行完
   }
 }

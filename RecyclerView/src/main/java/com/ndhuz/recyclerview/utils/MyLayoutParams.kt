@@ -2,6 +2,7 @@ package com.ndhuz.recyclerview.utils
 
 import android.graphics.Rect
 import android.view.ViewGroup.MarginLayoutParams
+import com.ndhuz.recyclerview.viewholder.MyViewHolder
 
 /**
  * .
@@ -11,4 +12,6 @@ import android.view.ViewGroup.MarginLayoutParams
  */
 class MyLayoutParams(width: Int, height: Int) : MarginLayoutParams(width, height) {
   internal val mDecorInsets: Rect = Rect()
+  
+  internal var mViewHolder: MyViewHolder? = null
 }

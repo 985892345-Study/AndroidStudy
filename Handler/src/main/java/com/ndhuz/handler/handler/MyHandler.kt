@@ -1,12 +1,15 @@
 package com.ndhuz.handler.handler
 
+import android.os.Handler
 import android.os.SystemClock
 import com.ndhuz.handler.looper.MyLooper
 import com.ndhuz.handler.message.MyMessage
 import com.ndhuz.handler.message.MyMessageQueue
 
 /**
- * .
+ * [Handler]
+ *
+ * - post 虽然使用的 Runnable，但是内部会从回收池里得到一个 Message 来包裹 Runnable，设置在 [MyMessage.callback] 变量
  *
  * @author 985892345
  * 2023/3/20 22:13

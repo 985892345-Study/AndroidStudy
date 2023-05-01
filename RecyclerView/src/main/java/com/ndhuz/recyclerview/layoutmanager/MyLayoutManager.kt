@@ -10,6 +10,7 @@ import com.ndhuz.recyclerview.recycler.MyRecycler
 import com.ndhuz.recyclerview.utils.MyChildHelper
 import com.ndhuz.recyclerview.utils.MyState
 import com.ndhuz.recyclerview.view.MyRecyclerView
+import com.ndhuz.recyclerview.view.MyRecyclerView.Companion.getChildViewHolderInt
 import kotlin.math.max
 import kotlin.math.min
 
@@ -90,7 +91,36 @@ abstract class MyLayoutManager {
     mRecyclerView.defaultOnMeasure(widthSpec, heightSpec)
   }
   
+  /**
+   * 执行布局的核心方法
+   *
+   * 可能会回调多次
+   *
+   * 支持预测动画意味着该方法会被调用两次；
+   * 一次作为“预”布局步骤确定项目在实际布局之前的位置，然后再次进行“实际”布局。
+   *
+   * 在预布局阶段，rv 会记住它们在布局前的位置，以允许它们被适当地布局。
+   * 此外，被移除的 item 将从 scrap 中返回，以帮助确定其他项目的正确放置。
+   * 这些移除的项目不应该添加到子列表中，但应该用于帮助计算其他视图的正确位置，
+   * 包括以前不在屏幕上的视图（称为 APPEARING 视图），但可以确定其预布局屏幕外位置给出有关预布局删除视图的额外信息。
+   *
+   * 第二个布局阶段是真正的布局，其中只使用未移除的视图。
+   * 在此过程中唯一的附加要求是，如果 [supportsPredictiveItemAnimations] 返回 true，
+   * 请注意哪些视图在布局之前存在于子列表中，哪些在布局之后不存在（称为消失视图），
+   * 并在不考虑 rv 实际边界的情况下定位或布局这些视图。
+   *
+   * 这允许动画系统知道这些消失的 item 需要移动到什么位置。
+   */
   open fun onLayoutChildren(recycler: MyRecycler, state: MyState) {
+  
+  }
+  
+  /**
+   * 布局完成后的回调
+   *
+   * 一次重新布局中 [onLayoutChildren] 可能会回调多次，但 [onLayoutCompleted] 只会回调一次
+   */
+  open fun onLayoutCompleted(state: MyState) {
   
   }
   
@@ -148,16 +178,30 @@ abstract class MyLayoutManager {
   }
   
   fun getWidth(): Int = mWidth
+  
   fun getHeight(): Int = mHeight
+  
+  // 回收一级缓存
+  internal fun removeAndRecycleScrapInt(recycler: MyRecycler) {
+    val scrapCount = recycler.getScrapCount()
+    for (i in scrapCount - 1 downTo 0) {
+      val scrap = recycler.getScrapViewAt(i)
+      val vh = getChildViewHolderInt(scrap)
+      if (vh.shouldIgnore()) continue
+      // 回收 vh
+    }
+    recycler.clearScrap()
+  }
+  
   
   companion object {
     fun chooseSize(spec: Int, desired: Int, min: Int): Int {
-      val mode = View.MeasureSpec.getMode(spec)
-      val size = View.MeasureSpec.getSize(spec)
+      val mode = MeasureSpec.getMode(spec)
+      val size = MeasureSpec.getSize(spec)
       return when (mode) {
-        View.MeasureSpec.EXACTLY -> size
-        View.MeasureSpec.AT_MOST -> min(size, max(desired, min))
-        View.MeasureSpec.UNSPECIFIED -> max(desired, min) /// 如果是 UNSPECIFIED，则跟父布局提供的宽高无关联
+        MeasureSpec.EXACTLY -> size
+        MeasureSpec.AT_MOST -> min(size, max(desired, min))
+        MeasureSpec.UNSPECIFIED -> max(desired, min) /// 如果是 UNSPECIFIED，则跟父布局提供的宽高无关联
         else -> max(desired, min)
       }
     }

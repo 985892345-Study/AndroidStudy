@@ -2,11 +2,15 @@ package com.ndhuz.handler.message
 
 import android.annotation.SuppressLint
 import android.os.Build
+import android.os.Message
 import android.os.SystemClock
 import com.ndhuz.handler.handler.MyHandler
 
 /**
- * .
+ * [Message]
+ *
+ * - Message 提供了一个回收池，容量 50，可以通过 [MyMessage.obtain] 获得，虽然提供了 [MyMessage.recycle] 方法，
+ *  但这个方法限制了只能 [MyMessage.isInUse] = false 时才使用，通常情况下回收发生在 [MyHandler.removeMessage] 中调用 [MyMessage.recycleUnchecked] 时
  *
  * @author 985892345
  * 2023/3/20 22:14
@@ -49,7 +53,10 @@ class MyMessage {
   /**
    * 回收 Message，供外部调用的方法
    *
-   * 如果当前 Message 正处于使用中，在 SDK 21 以上时会抛异常
+   * 如果当前 Message 正处于使用中，在 SDK 21 以上时会抛异常，
+   * 如果你手动调用，只有没有在使用的 Message 才能被回收
+   *
+   * 通常 Message 回收发生在 [MyHandler.removeMessage] 中调用 [MyMessage.recycleUnchecked] 时
    */
   fun recycle() {
     if (isInUse()) {
@@ -66,7 +73,7 @@ class MyMessage {
    * 回收 Message
    */
   internal fun recycleUnchecked() {
-    flags = FLAG_IN_USE
+    flags = FLAG_IN_USE // 回收进池子时仍然设置为在使用的状态
     what = 0
     arg1 = 0
     any = null
@@ -154,7 +161,7 @@ class MyMessage {
         if (m != null) {
           sPool = m.next
           m.next = null
-          m.flags = 0
+          m.flags = 0 // 这里使用时才清除使用标志
           sPoolSize--
           return m
         }

@@ -1,10 +1,11 @@
 package com.ndhuz.handler.looper
 
+import android.os.Looper
 import com.ndhuz.handler.message.MyMessageQueue
 import com.ndhuz.threadlocal.thread.MyThreadLocal
 
 /**
- * .
+ * [Looper]
  *
  * @author 985892345
  * 2023/3/20 22:14

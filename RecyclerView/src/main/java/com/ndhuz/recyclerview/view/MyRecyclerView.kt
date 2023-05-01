@@ -16,6 +16,8 @@ import com.ndhuz.recyclerview.recycler.MyRecycler
 import com.ndhuz.recyclerview.utils.MyChildHelper
 import com.ndhuz.recyclerview.utils.MyLayoutParams
 import com.ndhuz.recyclerview.utils.MyState
+import com.ndhuz.recyclerview.utils.MyViewInfoStore
+import com.ndhuz.recyclerview.viewholder.MyViewHolder
 
 /**
  * [RecyclerView]
@@ -37,6 +39,9 @@ class MyRecyclerView(context: Context, attrs: AttributeSet? = null) : ViewGroup(
   
   private val mState = MyState()
   
+  // 是否存在 item 内容发生了更新
+  private var mItemsChanged = false
+  
   internal val mTempRect = Rect()
   
   // 如果 RV 的大小不受 Adapter 影响则可以设置为 true 进行优化
@@ -53,8 +58,8 @@ class MyRecyclerView(context: Context, attrs: AttributeSet? = null) : ViewGroup(
       override fun getChildCount(): Int {
         return this@MyRecyclerView.childCount
       }
-  
-      override fun getChildAt(offset: Int): View? {
+      
+      override fun getChildAt(offset: Int): View {
         return this@MyRecyclerView.getChildAt(offset)
       }
     }
@@ -65,6 +70,8 @@ class MyRecyclerView(context: Context, attrs: AttributeSet? = null) : ViewGroup(
     
     }
   )
+  
+  private val mViewInfoStore = MyViewInfoStore()
   
   override fun onMeasure(widthSpec: Int, heightSpec: Int) {
     if (!this::mLayout.isInitialized) {
@@ -123,7 +130,8 @@ class MyRecyclerView(context: Context, attrs: AttributeSet? = null) : ViewGroup(
       }
       if (mAdapterUpdateDuringMeasure) {
         /// 如果 Adapter 发生了更新操作
-        
+        // 抑制布局
+        startInterceptRequestLayout()
         /// 预加载动画
         processAdapterUpdatesAndSetAnimationFlags()
         
@@ -131,9 +139,12 @@ class MyRecyclerView(context: Context, attrs: AttributeSet? = null) : ViewGroup(
           /// 如果需要预测动画，则会开启预布局
           mState.mInPreLayout = true
         } else {
+          // 一次性应用所有更新
           mAdapterHelper.consumeUpdatesInOnePass()
           mState.mInPreLayout = false
         }
+        // 抑制布局结束
+        stopInterceptRequestLayout(false)
       } else if (mState.mRunPredictiveAnimations) {
         // 如果 mAdapterUpdateDuringMeasure 为假且 mRunPredictiveAnimations 为真：
         // 这意味着已经执行了一个 onMeasure() 调用来处理挂起的适配器更改，
@@ -145,15 +156,17 @@ class MyRecyclerView(context: Context, attrs: AttributeSet? = null) : ViewGroup(
       }
       
       // ...
-      
+      // 抑制布局
+      startInterceptRequestLayout()
       /// 前面处理了动画，最后调用 LayoutManager.onMeasure() 进行自定义布局
       /// 但值得注意的是这里仅仅是在 mLayout.isAutoMeasureEnabled() = false 时才会调用
       /// LinearLayoutManager 等官方 LM 都是使用了自动测量机制
       mLayout.onMeasure(mRecycler, mState, widthSpec, heightSpec)
+      // 抑制布局结束
+      stopInterceptRequestLayout(false)
       mState.mInPreLayout = false
     }
   }
-  
   
   
   /**
@@ -167,6 +180,7 @@ class MyRecyclerView(context: Context, attrs: AttributeSet? = null) : ViewGroup(
       mAdapterHelper.preProcess()
     } else {
       // 不支持 item 移动动画
+      // 一次性应用所有更新
       mAdapterHelper.consumeUpdatesInOnePass()
     }
     // 源码中这里有一堆判断，如果是添加、删除或修改就会执行动画
@@ -177,6 +191,7 @@ class MyRecyclerView(context: Context, attrs: AttributeSet? = null) : ViewGroup(
   }
   
   private fun predictiveItemAnimationsEnabled(): Boolean {
+    // 是否支持 item 预测动画，官方的 LayoutManager 默认支持
     return mItemAnimator != null && mLayout.supportsPredictiveItemAnimations()
   }
   
@@ -240,42 +255,115 @@ class MyRecyclerView(context: Context, attrs: AttributeSet? = null) : ViewGroup(
    * [RecyclerView.dispatchLayoutStep1]
    */
   private fun dispatchLayoutStep1() {
+    check(mState.mLayoutStep == MyState.LayoutStep.STEP_START)
     // ...
     mState.mIsMeasuring = false
+    // 抑制布局
+    startInterceptRequestLayout()
     // ...
     /// 判断是否需要开启动画
     processAdapterUpdatesAndSetAnimationFlags()
+    mState.mTrackOldChangeHolders = mState.mRunSimpleAnimations && mItemsChanged
+    mItemsChanged = false
+    /// 记录预布局状态到 State 中
     mState.mInPreLayout = mState.mRunPredictiveAnimations
     // ...
     if (mState.mRunSimpleAnimations) {
-      repeat(mChildHelper.getChildCount()) {
-        /// 保存旧的 item 位置信息
+      /*
+      * //# 第0步：记录所有未删除的 item 信息
+      * */
+      for (i in 0 until mChildHelper.getChildCount()) {
+        val holder = getChildViewHolderInt(mChildHelper.getChildAt(i))
+        if (holder.shouldIgnore() || (holder.isInvalid() && !mAdapter.hasStableIds())) {
+          // 如果 holder 需要被忽略掉或者 holder 无效并且 adapter 没有设置唯一 id 时就跳过保存 item 信息
+          continue
+        }
+        /// 得到 item 旧的位置信息 (上次布局的信息)
+        val animationInfo = mItemAnimator!!.recordPreLayoutInformation(
+          mState, holder, MyItemAnimator.buildAdapterChangeFlagsForAnimations(holder),
+          holder.getUnmodifiedPayloads()
+        )
+        /// 把 item 旧的位置信息保存进 mViewInfoStore
+        mViewInfoStore.addToPreLayout(holder, animationInfo)
+        if (mState.mTrackOldChangeHolders && holder.isUpdate() && !holder.isRemoved()
+          && !holder.shouldIgnore() && !holder.isInvalid()
+        ) {
+          val key = getChangedHolderKey(holder)
+          /// 对于需要发生更新的 holder，将单独保存
+          // 因为更新的动画与增删移的动画是分开的。在 dispatchLayoutStep3 中会拿出来进行对比
+          mViewInfoStore.addToOldChangeHolders(key, holder)
+        }
       }
     }
     if (mState.mRunPredictiveAnimations) {
-      // ...
-      /// 调用 onLayoutChildren() 预布局
+      /*
+      * //# 第 1 步：运行预布局：这将使用项目的旧位置。
+      * //# LayoutManager 应该对所有内容进行布局，甚至是删除的项目（尽管不会将删除的项目添加回容器）
+      * */
+      /// 动画执行前保存 holder 当前位置
+      saveOldPositions()
+      /// 调用 onLayoutChildren() 进行预布局
       mLayout.onLayoutChildren(mRecycler, mState)
-      // ...
-      repeat(mChildHelper.getChildCount()) {
-        /// 可能新增了 item，所以这里记录新增的 item 信息
+      
+      /// 遍历所有 item，寻找预布局后新增的 item
+      for (i in 0 until mChildHelper.getChildCount()) {
+        val holder = getChildViewHolderInt(mChildHelper.getChildAt(i))
+        if (holder.shouldIgnore()) continue
+        
+        // 根据是否添加进 mViewInfoStore 的 pre layout 来判断
+        if (!mViewInfoStore.isInPreLayout(holder)) {
+          // 创建一个新的标志
+          var flags = MyItemAnimator.buildAdapterChangeFlagsForAnimations(holder)
+          val wasHidden = (holder.mFlags and MyViewHolder.FLAG_BOUNCED_FROM_HIDDEN_LIST) != 0
+          if (!wasHidden) {
+            // 如果不是隐藏的 item，添加在预布局中出现的标志
+            flags = flags or MyViewHolder.FLAG_APPEARED_IN_PRE_LAYOUT
+          }
+          val animationInfo = mItemAnimator!!.recordPreLayoutInformation(
+            mState, holder, flags, holder.getUnmodifiedPayloads()
+          )
+          if (wasHidden) {
+            // 如果是隐藏的 item，就取消标志然后添加进 mViewInfoStore
+            recordAnimationInfoIfBouncedHiddenView(holder, animationInfo)
+          } else {
+            /// 新增的 item 以 Appeared 形式进行添加进 mViewInfoStore
+            mViewInfoStore.addToAppearedInPreLayoutHolders(holder, animationInfo)
+          }
+        }
       }
+      clearOldPositions()
+    } else {
+      clearOldPositions()
     }
-    // ...
+    // 抑制布局结束
+    stopInterceptRequestLayout(false)
     mState.mLayoutStep = MyState.LayoutStep.STEP_LAYOUT
   }
   
   /**
    * //# 真正用于布局的方法，会回调 LayoutManager.onLayoutChildren()
-   * //# 正常布局填完屏幕后，如果一级缓存 Scrap 中有多的 ViewHolder，会全部布局上去 (由 LayoutManager 实现)
+   * //# 正常布局填完屏幕后，如果一级缓存 Scrap 中有多的未被移除的 ViewHolder，仍然会布局上去 (由 LayoutManager 实现)
    *
    * [RecyclerView.dispatchLayoutStep2]
    */
   private fun dispatchLayoutStep2() {
+    check(
+      mState.mLayoutStep == MyState.LayoutStep.STEP_LAYOUT
+        || mState.mLayoutStep == MyState.LayoutStep.STEP_ANIMATIONS
+    )
+    // 抑制布局
+    startInterceptRequestLayout()
+    // 一次性应用所有更新
+    mAdapterHelper.consumeUpdatesInOnePass()
     // ...
+    mState.mInPreLayout = false
     /// 正式布局
     mLayout.onLayoutChildren(mRecycler, mState)
+    
+    mState.mLayoutStep = MyState.LayoutStep.STEP_ANIMATIONS
     // ...
+    // 抑制布局结束
+    stopInterceptRequestLayout(false)
   }
   
   /**
@@ -285,26 +373,258 @@ class MyRecyclerView(context: Context, attrs: AttributeSet? = null) : ViewGroup(
    * [RecyclerView.dispatchLayoutStep3]
    */
   private fun dispatchLayoutStep3() {
+    check(mState.mLayoutStep == MyState.LayoutStep.STEP_ANIMATIONS)
+    // 抑制布局
+    startInterceptRequestLayout()
+    mState.mLayoutStep = MyState.LayoutStep.STEP_START
     if (mState.mRunSimpleAnimations) {
-      repeat(mChildHelper.getChildCount()) {
-        /// 记录当前 item 的位置信息
-        // mViewInfoStore.addToPostLayout(holder, animationInfo);
+      for (i in 0 until mChildHelper.getChildCount()) {
+        val holder = getChildViewHolderInt(mChildHelper.getChildAt(i))
+        if (holder.shouldIgnore()) continue
+        val key = getChangedHolderKey(holder)
+        val animationInfo = mItemAnimator!!.recordPostLayoutInformation(mState, holder)
+        val oldChangeViewHolder = mViewInfoStore.getFromOldChangeHolders(key)
+        if (oldChangeViewHolder != null && !oldChangeViewHolder.shouldIgnore()) {
+          /// 如果是触发更新的 holder
+          val oldDisappearing = mViewInfoStore.isDisappearing(oldChangeViewHolder)
+          val newDisappearing = mViewInfoStore.isDisappearing(holder)
+          if (oldDisappearing && oldChangeViewHolder === holder) {
+            // 如果 holder 被移除了，就不再运行更新动画，直接运行 disappear 动画
+            mViewInfoStore.addToPostLayout(holder, animationInfo)
+          } else {
+            val preInfo = mViewInfoStore.popFromPreLayout(oldChangeViewHolder)
+            mViewInfoStore.addToPostLayout(holder, animationInfo)
+            val postInfo = mViewInfoStore.popFromPostLayout(holder)!!
+            if (preInfo == null) {
+              // 源码中这里会抛出异常然后打印出来
+            } else {
+              /// 运行 holder 更新动画 (更新动画单独在这里执行)
+              animateChange(
+                oldChangeViewHolder, holder, preInfo, postInfo,
+                oldDisappearing, newDisappearing
+              )
+            }
+          }
+        } else {
+          /// 记录被移除和被移动的 holder 信息
+          mViewInfoStore.addToPostLayout(holder, animationInfo)
+        }
       }
-      /// 开始执行动画
-      // mViewInfoStore.process(mViewInfoProcessCallback);
+      /// 开始执行动画 (这里面不包含更新动画，只包含增删移动画)
+      mViewInfoStore.process(mViewInfoProcessCallback);
     }
+    
+    /// 回收一级缓存
+    mLayout.removeAndRecycleScrapInt(mRecycler)
+    mState.mRunSimpleAnimations = false
+    mState.mRunPredictiveAnimations = false
+    mRecycler.mChangedScrap.clear()
+    
+    /// 通知布局结束
+    mLayout.onLayoutCompleted(mState)
+    // 抑制布局结束
+    stopInterceptRequestLayout(false)
+    mViewInfoStore.clear()
   }
+  
   
   // 供 MyLayoutManager 调用，因为 setMeasuredDimension() 是 protected
   internal fun setMeasuredDimensionInternal(measuredWidth: Int, measuredHeight: Int) {
     setMeasuredDimension(measuredWidth, measuredHeight)
   }
   
-  companion object {
+  // ViewHolder 得到 AdapterPosition
+  internal fun getAdapterPositionFoe(holder: MyViewHolder): Int {
+    if ((holder.mFlags and (MyViewHolder.FLAG_INVALID or MyViewHolder.FLAG_REMOVED) != 0)
+      || !holder.isBound()
+    ) {
+      return RecyclerView.NO_POSITION
+    }
+    return mAdapterHelper.applyPendingUpdatesToPosition(holder.mPosition)
+  }
+  
+  // 返回处理更改动画时要使用的唯一键。根据适配器类型，它可能是孩子的位置或稳定的 ID。
+  internal fun getChangedHolderKey(holder: MyViewHolder): Long {
+    return if (mAdapter.hasStableIds()) holder.getItemId() else holder.mPosition.toLong()
+  }
+  
+  // 保存所有 holder 当前位置
+  internal fun saveOldPositions() {
+    repeat(mChildHelper.getUnfilteredChildCount()) {
+      val holder = getChildViewHolderInt(mChildHelper.getChildAt(it))
+      if (!holder.shouldIgnore()) {
+        holder.saveOldPosition() // 保存 mPosition 到 mOldPosition
+      }
+    }
+  }
+  
+  // 清理所有 holder 旧位置
+  internal fun clearOldPositions() {
+    repeat(mChildHelper.getUnfilteredChildCount()) {
+      val holder = getChildViewHolderInt(mChildHelper.getChildAt(it))
+      if (!holder.shouldIgnore()) {
+        holder.clearOldPosition() // 清除 mOldPosition 和 mPreLayoutPosition
+      }
+    }
+    mRecycler.clearOldPosition()
+  }
+  
+  // 记录从隐藏列表弹回的视图持有者的动画信息。它还清除 FLAG_BOUNCED_FROM_HIDDEN_LIST 标志。
+  internal fun recordAnimationInfoIfBouncedHiddenView(
+    holder: MyViewHolder,
+    animationInfo: MyItemAnimator.MyItemHolderInfo
+  ) {
+    // 清除 FLAG_BOUNCED_FROM_HIDDEN_LIST 标志
+    holder.setFlags(0, MyViewHolder.FLAG_BOUNCED_FROM_HIDDEN_LIST)
+    if (mState.mTrackOldChangeHolders && holder.isUpdate() && !holder.isRemoved()
+      && !holder.shouldIgnore()
+    ) {
+      val key = getChangedHolderKey(holder)
+      mViewInfoStore.addToOldChangeHolders(key, holder)
+    }
+    mViewInfoStore.addToPreLayout(holder, animationInfo)
+  }
+  
+  
+  ////////////////////
+  //
+  //    抑制布局相关
+  //
+  ////////////////////
+  
+  // 拦截 requestLayout() 的计数器
+  private var mInterceptRequestLayoutDepth = 0
+  
+  // 是否抑制布局，调用 suppressLayout 时传入的值
+  private var mLayoutSuppressed = false
+  
+  // 抑制布局期间是否调用了 requestLayout 请求重新布局
+  private var mLayoutWasDeferred = false
+  
+  // 拦截 requestLayout()，内部采取计数方式，可重入式
+  private fun startInterceptRequestLayout() {
+    mInterceptRequestLayoutDepth++
+    if (mInterceptRequestLayoutDepth == 1 && !mLayoutSuppressed) {
+      mLayoutWasDeferred = false // 初始化
+    }
+  }
+  
+  // 取消拦截 requestLayout()，performLayoutChildren: 是否执行子 View 布局
+  private fun stopInterceptRequestLayout(performLayoutChildren: Boolean) {
+    if (!performLayoutChildren && !mLayoutSuppressed) {
+      mLayoutWasDeferred = false
+    }
+    if (mInterceptRequestLayoutDepth == 1) {
+      if (performLayoutChildren && mLayoutWasDeferred && !mLayoutSuppressed
+        && this::mLayout.isInitialized && this::mAdapter.isInitialized
+      ) {
+        dispatchLayout()
+      }
+      if (!mLayoutSuppressed) {
+        mLayoutWasDeferred = false
+      }
+    }
+    mInterceptRequestLayoutDepth--
+  }
+  
+  override fun suppressLayout(suppress: Boolean) {
+    if (suppress != mLayoutSuppressed) {
+      if (!suppress) {
+        mLayoutSuppressed = false
+        if (mLayoutWasDeferred && this::mLayout.isInitialized && this::mAdapter.isInitialized) {
+          requestLayout()
+        }
+        mLayoutWasDeferred = false
+      } else {
+        // 这里 rv 在布局被抑制时直接发送了一个 CANCEL 事件给自身，并且设置了 mIgnoreMotionEventTillDown 变量
+        // 用于拦截后续事件，原因我猜测是因为布局抑制后不能滚动索性就直接把自身事件给取消算了
+        // (注意这里只是调用 onTouchEvent 给自身，并不会影响子 View 的事件分发)
+        //        val now = SystemClock.uptimeMillis()
+        //        val cancelEvent = MotionEvent.obtain(
+        //          now, now,
+        //          MotionEvent.ACTION_CANCEL, 0.0f, 0.0f, 0
+        //        )
+        //        onTouchEvent(cancelEvent)
+        mLayoutSuppressed = true
+        //        mIgnoreMotionEventTillDown = true
+        //        stopScroll()
+      }
+    }
+  }
+  
+  override fun requestLayout() {
+    if (mInterceptRequestLayoutDepth == 0 && !mLayoutSuppressed) {
+      super.requestLayout()
+    } else {
+      mLayoutWasDeferred = true
+    }
+  }
+  
+  
+  //////////////////////
+  //
+  //      动画相关
+  //
+  //////////////////////
+  
+  private val mViewInfoProcessCallback = object : MyViewInfoStore.MyProcessCallback {
+    override fun processDisappeared(
+      holder: MyViewHolder,
+      preInfo: MyItemAnimator.MyItemHolderInfo,
+      postInfo: MyItemAnimator.MyItemHolderInfo?
+    ) {
+      // 先从 recycler 中释放当前 holder
+      mRecycler.unscrapView(holder)
+      // 触发 mItemAnimator.animateAppearance()
+    }
+  
+    override fun processAppeared(
+      holder: MyViewHolder,
+      preInfo: MyItemAnimator.MyItemHolderInfo?,
+      postInfo: MyItemAnimator.MyItemHolderInfo
+    ) {
+      // 触发 mItemAnimator.animateDisappearance()
+    }
+  
+    override fun processPersistent(
+      holder: MyViewHolder,
+      preInfo: MyItemAnimator.MyItemHolderInfo,
+      postInfo: MyItemAnimator.MyItemHolderInfo
+    ) {
+      // 会调用 mItemAnimator.animateChange() 或者 mItemAnimator.animatePersistence()
+    }
+  
+    override fun unused(holder: MyViewHolder) {
+      // 执行 mLayout.removeAndRecycleView(viewHolder.itemView, mRecycler)
+    }
     
     /**
-     * 返回视图的边界，包括它的装饰和边距。
+     * 上面虽然都调用了 mItemAnimator.animate**() 方法，但都不会立马执行动画，只用来保存信息，
+     * 然后 rv 会调用
+     * postAnimationRunner()
+     *         ↓
+     * ViewCompat.postOnAnimation(this, mItemAnimatorRunner)
+     * /// 最后动画会在下一帧时才开始执行
+     *
+     * 动画执行后会回调 [RecyclerView.mItemAnimatorListener]，
+     * /// 最后对 holder 进行回收，回收进二级缓存 mCachedViews 中
      */
+  }
+  
+  private fun animateChange(
+    oldHolder: MyViewHolder,
+    newHolder: MyViewHolder,
+    pre: MyItemAnimator.MyItemHolderInfo,
+    post: MyItemAnimator.MyItemHolderInfo,
+    oldHolderDisappearing: Boolean,
+    newHolderDisappearing: Boolean
+  ) {
+    // 触发 mItemAnimator.animateChange()
+  }
+  
+  companion object {
+    
+    // 返回视图的边界，包括它的装饰和边距
     fun getDecoratedBoundsWithMarginsInt(view: View, outBounds: Rect) {
       val lp = view.layoutParams as MyLayoutParams
       val insets = lp.mDecorInsets
@@ -314,6 +634,11 @@ class MyRecyclerView(context: Context, attrs: AttributeSet? = null) : ViewGroup(
         view.right + insets.right + lp.rightMargin,
         view.bottom + insets.bottom + lp.bottomMargin
       )
+    }
+    
+    // 通过 view 得到 ViewHolder
+    fun getChildViewHolderInt(child: View): MyViewHolder {
+      return (child.layoutParams as MyLayoutParams).mViewHolder!!
     }
   }
 }

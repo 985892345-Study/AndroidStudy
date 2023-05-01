@@ -12,15 +12,22 @@ class MyChildHelper(callback: Callback) {
   
   private val mCallBack: Callback = callback
   
+  // 这个跟 mHiddenViews 相关，主要是记录隐藏 item 的位置
   private val mBucket: MyBucket = MyBucket()
   
   private val mHiddenViews = mutableListOf<View>()
   
+  // 返回未隐藏的 item 总数
   internal fun getChildCount(): Int {
     return mCallBack.getChildCount() - mHiddenViews.size
   }
   
-  internal fun getChildAt(index: Int): View? {
+  // 返回孩子的总数，包括隐藏的 item
+  internal fun getUnfilteredChildCount(): Int {
+    return mCallBack.getChildCount()
+  }
+  
+  internal fun getChildAt(index: Int): View {
     val offset = getOffset(index)
     return mCallBack.getChildAt(offset)
   }
@@ -51,6 +58,6 @@ class MyChildHelper(callback: Callback) {
     fun getChildCount(): Int
     
     // 最后调用的 RecyclerView#getChildAt
-    fun getChildAt(offset: Int): View?
+    fun getChildAt(offset: Int): View
   }
 }
