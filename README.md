@@ -71,6 +71,7 @@
 - [ ] EventBus
 
 ## 注意事项
+### 注释
 由于注释都是同一种颜色，不好写笔记，所以我使用了 [Better Highlights](https://plugins.jetbrains.com/plugin/12895-better-highlights) 插件用于给不同的注释显示不同的颜色。
 
 我的配置如下：
@@ -87,3 +88,7 @@ Comment
 因为 cpp 文件未导入进行编译，所以需要开启此选项才能在 cpp 里面看到特殊注释
 
 <img src="doce/img/img_annotation_color_cpp.png" width="360" />
+
+### 如何白嫖?
+如果你想白嫖的话，请查看每个项目 java 包下的 Answer.kt，里面包含一些常见的面试题答案 (因为 README 不如直接写注释方便)
+
