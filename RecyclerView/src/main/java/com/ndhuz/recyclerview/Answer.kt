@@ -9,6 +9,8 @@ package com.ndhuz.recyclerview
 
 /*
 * https://juejin.cn/post/6931894526160142350
+* https://juejin.cn/post/6844904164359667720
+* https://blog.csdn.net/qjyws/article/details/123237071
 *
 * /// RV 的测量流程 ?
 * 分三步走
@@ -68,4 +70,90 @@ package com.ndhuz.recyclerview
 * /// RV hasStableIds 的作用 ?
 *
 *
+* /// RV 的预取操作 ?
+* https://juejin.cn/post/6911107137661829128
+* 预取就是把将要显示的 ViewHolder 预先放置到缓存中，以优化 RecyclerView 滑动流畅度，在 SDK21 后加入
+*
+* 由 GapWorker 实现，官方的 LayoutManager 支持
+* 基本原理为：rv 通过在手指触摸和滑动中通知 GapWorker 发送一个 Runnable 来提前加载附近的 holder 到缓存中
+*
+*
+* /// LinearLayoutManager 的 holder 加载流程 ?
+* 这里以单个 holder 占一页来记录 (就像 VP2 一样)，一页如果有多个 holder，其实逻辑是一样的
+*
+* //# 第 1 个 holder 的创建在 dispatchLayoutStep2 时触发，记为 A
+* onLayout -> dispatchLayoutStep2 -> LayoutManager.onLayoutChildren ->
+* 调用 fill 方法布局，布局时会调用 Recycler.tryGetViewHolderForPositionByDeadline ->
+* 因为是第 1 个没缓存所以回调 createViewHolder
+*
+* 当前处于第 0 页
+*
+* onCreate(A)
+* onBind(A)
+* 二级缓存: []
+*
+*
+* //# 第 2 个 holder 是在滑动时触发，记为 B
+* onTouchEvent -> scrollByInternal -> LayoutManager.scrollHorizontallyBy ->
+* 仍然是调用 fill 方法布局，布局时会调用 Recycler.tryGetViewHolderForPositionByDeadline ->
+* 因为没缓存所以回调 createViewHolder
+*
+* 滑进部分第 1 页时
+*
+* onCreate(B)
+* onBind(B)
+* 二级缓存: []
+*
+*
+* //# 第 3 个 holder 也是在滑动时触发，记为 C
+*
+* 预取
+*
+* onCreate(C)
+* 二级缓存: [C]
+*
+* 滑进部分第 2 页时
+*
+* onBind(C)
+* 二级缓存: []
+*
+* //# 第 4 个 holder 也是在滑动时触发，记为 D
+*
+* 预取
+*
+* 二级缓存: [A]
+* onCreate(D)
+* 二级缓存: [A, D]
+*
+* 滑进部分第 3 页时
+*
+* onBind(D)
+* 二级缓存: [A]
+*
+* //# 第 5 个 holder 也是在滑动时触发，记为 E
+*
+* 预取
+*
+* 二级缓存: [A, B]
+* onCreate(E)
+* 二级缓存: [A, B, E]
+*
+* 滑进部分第 4 页时
+*
+* onBind(E)
+* 二级缓存: [A, B]
+*
+* 隔了一段时间
+*
+* 四级缓存: [A]
+* onBind(A) position = 5，注意此时并没有滑进第 5 页
+* 二级缓存: [B, C]
+*
+* 滑进第 5 页
+*
+* 四级缓存: [B]
+* onBind(B) position = 6
+* 二级缓存: [C, D]
+*
+* //# 上面这些原因在 LinearLayoutManager 中，后面有时间再来详细分析
 * */

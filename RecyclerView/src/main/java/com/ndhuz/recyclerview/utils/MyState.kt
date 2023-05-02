@@ -20,6 +20,9 @@ class MyState {
   // 是否是 item 预测动画
   internal var mRunPredictiveAnimations = false
   
+  // 是否调用了 notifyDataSetChanged
+  internal var mStructureChanged = false
+  
   // 是否处于预布局
   internal var mInPreLayout = false
   

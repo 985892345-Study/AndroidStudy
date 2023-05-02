@@ -3,6 +3,8 @@ package com.ndhuz.recyclerview.utils
 import androidx.collection.LongSparseArray
 import androidx.collection.SimpleArrayMap
 import androidx.core.util.Pools
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView.LayoutManager
 import com.ndhuz.recyclerview.animation.MyItemAnimator
 import com.ndhuz.recyclerview.viewholder.MyViewHolder
 
@@ -131,7 +133,9 @@ internal class MyViewInfoStore {
   }
   
   /**
-   * 添加 item Disappeared 标志
+   * 添加 item Disappeared
+   *
+   * 消失动画由 [LayoutManager] 触发，具体可以看 [LinearLayoutManager.layoutChunk]
    */
   fun addToDisappearedInLayout(holder: MyViewHolder) {
     var record = mLayoutHolderMap.get(holder)
@@ -177,6 +181,7 @@ internal class MyViewInfoStore {
         callback.processDisappeared(holder, record.preInfo!!, null)
       } else if ((record.flags and MyInfoRecord.FLAG_POST) != 0) {
         // 不存在预布局中，但添加到了后期布局
+        /// 这里通常情况下只有因为 holder 无效在 dispatchLayoutStep1() 总记录 preInfo 才导致的
         callback.processAppeared(holder, record.preInfo, record.postInfo!!)
       } else if ((record.flags and MyInfoRecord.FLAG_APPEAR) != 0) {
         // 临时的 item，rv 会自动回收它们

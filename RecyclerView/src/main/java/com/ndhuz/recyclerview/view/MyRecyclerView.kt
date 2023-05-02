@@ -6,7 +6,9 @@ import android.util.AttributeSet
 import android.view.View
 import android.view.ViewGroup
 import androidx.core.view.ViewCompat
+import androidx.recyclerview.widget.DefaultItemAnimator
 import androidx.recyclerview.widget.RecyclerView
+import androidx.recyclerview.widget.SimpleItemAnimator
 import com.ndhuz.recyclerview.adapter.MyAdapter
 import com.ndhuz.recyclerview.adapter.MyAdapterHelper
 import com.ndhuz.recyclerview.animation.MyDefaultItemAnimator
@@ -272,12 +274,22 @@ class MyRecyclerView(context: Context, attrs: AttributeSet? = null) : ViewGroup(
     // ...
     if (mState.mRunSimpleAnimations) {
       /*
-      * //# 第0步：记录所有未删除的 item 信息
+      * //# 第 1 步：记录所有未删除的 item 信息
       * */
       for (i in 0 until mChildHelper.getChildCount()) {
         val holder = getChildViewHolderInt(mChildHelper.getChildAt(i))
         if (holder.shouldIgnore() || (holder.isInvalid() && !mAdapter.hasStableIds())) {
-          // 如果 holder 需要被忽略掉或者 holder 无效并且 adapter 没有设置唯一 id 时就跳过保存 item 信息
+          // 如果 holder 需要被忽略掉就跳过保存 item 信息
+          // 如果 holder 无效 (即调用了 notifyDataSetChanged) 并且 adapter 没有设置唯一 id 时 (hasStableIds = false) 也跳过
+          // 虽然跳过了，但也只是不执行移动和更新的动画，还有增加和删除的动画仍然会被记录
+          // 但是虽然增加和删除的动画被记录，但却因为没有 preInfo 导致 SimpleItemAnimator 只执行简单的淡入动画
+          /**
+           * [MyViewInfoStore.process] 的 (record.flags and MyInfoRecord.FLAG_POST) != 0 分支
+           *     ↓
+           * [mViewInfoProcessCallback] 的 processAppeared()
+           *     ↓
+           * [SimpleItemAnimator.animateAppearance]
+           */
           continue
         }
         /// 得到 item 旧的位置信息 (上次布局的信息)
@@ -299,18 +311,23 @@ class MyRecyclerView(context: Context, attrs: AttributeSet? = null) : ViewGroup(
     }
     if (mState.mRunPredictiveAnimations) {
       /*
-      * //# 第 1 步：运行预布局：这将使用项目的旧位置。
+      * //# 第 2 步：运行预布局：这将使用项目的旧位置。
       * //# LayoutManager 应该对所有内容进行布局，甚至是删除的项目（尽管不会将删除的项目添加回容器）
       * */
       /// 动画执行前保存 holder 当前位置
       saveOldPositions()
+      // 临时设置 mStructureChanged = false，因为预布局需要以前的布局
+      val didStructureChange = mState.mStructureChanged
+      mState.mStructureChanged = false // 临时还原
       /// 调用 onLayoutChildren() 进行预布局
       mLayout.onLayoutChildren(mRecycler, mState)
+      mState.mStructureChanged = didStructureChange // 这里再设置回来
       
       /// 遍历所有 item，寻找预布局后新增的 item
       for (i in 0 until mChildHelper.getChildCount()) {
         val holder = getChildViewHolderInt(mChildHelper.getChildAt(i))
         if (holder.shouldIgnore()) continue
+        // 这里并没有像前面一样判断 holder.isInvalid()，所以下面的增加动画会被记录
         
         // 根据是否添加进 mViewInfoStore 的 pre layout 来判断
         if (!mViewInfoStore.isInPreLayout(holder)) {
@@ -362,6 +379,8 @@ class MyRecyclerView(context: Context, attrs: AttributeSet? = null) : ViewGroup(
     /// 正式布局
     mLayout.onLayoutChildren(mRecycler, mState)
     
+    mState.mStructureChanged = false // 还原
+    
     mState.mLayoutStep = MyState.LayoutStep.STEP_ANIMATIONS
     // ...
     // 抑制布局结束
@@ -386,6 +405,8 @@ class MyRecyclerView(context: Context, attrs: AttributeSet? = null) : ViewGroup(
         val key = getChangedHolderKey(holder)
         val animationInfo = mItemAnimator!!.recordPostLayoutInformation(mState, holder)
         val oldChangeViewHolder = mViewInfoStore.getFromOldChangeHolders(key)
+        /// 如果是无效的 holder 话，这里 oldChangeViewHolder = null
+        // 因为前面 dispatchLayoutStep1() 中跳过了循环
         if (oldChangeViewHolder != null && !oldChangeViewHolder.shouldIgnore()) {
           /// 如果是触发更新的 holder
           val oldDisappearing = mViewInfoStore.isDisappearing(oldChangeViewHolder)
@@ -622,7 +643,11 @@ class MyRecyclerView(context: Context, attrs: AttributeSet? = null) : ViewGroup(
     oldHolderDisappearing: Boolean,
     newHolderDisappearing: Boolean
   ) {
-    // 触发 mItemAnimator.animateChange()
+    /**
+     * 触发 mItemAnimator.animateChange()
+     *
+     * 如果 oldHolder === newHolder，则只执行移动动画，代码逻辑可看 [DefaultItemAnimator.animateChange]
+     */
   }
   
   companion object {

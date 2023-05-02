@@ -116,11 +116,15 @@ abstract class MyViewHolder(
   
   internal fun setFlags(flags: Int, mask: Int) {
     // mask 中为 1 的位表示对应标志位需要被更新，为 0 的位表示对应标志位保持不变
-    // mFlags = 0xABCD   mask = 0x00FF   flags = 0x0034
-    // mFlags and mask.inv()  = 0xAB00
-    // flags and mask         = 0x0034
-    // mFlags                 = 0xAB34
+    // mFlags = 1010   flags = 0001   mask = 0011
+    // mFlags and mask.inv()  = 0010
+    // flags and mask         = 0001
+    // mFlags                 = 0011
     mFlags = mFlags and mask.inv() or (flags and mask)
+    // setFlags(0, mask) 相当于去掉 mask 标志
+    // setFlags(flags, mask) = setFlags(0, mask) or (flags and mask)
+    // 意思就是先去掉 mask 标志，再添加 flags 标志 (一般情况下 flags and mask = flags)
+    // 你可以这样用: setFlags(A, A or B or C) 去掉 A、B、C 标志，再添加 A 标志
   }
   
   // 添加 payload
@@ -162,12 +166,21 @@ abstract class MyViewHolder(
   
     /**
      * 这个 ViewHolder 已经绑定到一个位置； mPosition、mItemId 和 mItemViewType 均有效。
+     *
+     * ViewHolder 已经绑定数据
+     *
+     * - 调用了 onBindViewHolder()
      */
     val FLAG_BOUND = 1
   
     /**
-     * 这个 ViewHolder 的视图反映的数据是陈旧的，需要由适配器重新启动。
+     * 这个 ViewHolder 的视图反映的数据是陈旧的，需要由适配器重新绑定。
      * mPosition 和 mItemId 是一致的。
+     *
+     * ViewHolder 需要重新绑定数据
+     *
+     * - 调用了 notifyItemChanged()
+     * - 调用了 notifyDataSetChanged()
      */
     val FLAG_UPDATE = 1 shl 1
   
@@ -175,12 +188,18 @@ abstract class MyViewHolder(
      * 此 ViewHolder 的数据无效。
      * mPosition 和 mItemId 隐含的标识不可信，可能不再匹配项目视图类型。
      * 这个 ViewHolder 必须完全重新绑定到不同的数据。
+     *
+     * ViewHolder 已经无效
+     *
+     * - 调用了 notifyDataSetChanged()
      */
     val FLAG_INVALID = 1 shl 2
   
     /**
      * 此 ViewHolder 指向代表先前从数据集中删除的项目的数据。
      * 它的视图可能仍用于诸如传出动画之类的事情。
+     *
+     * - 调用了 notifyItemRemoved()
      */
     val FLAG_REMOVED = 1 shl 3
   
