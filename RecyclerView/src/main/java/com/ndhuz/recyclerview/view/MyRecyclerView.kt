@@ -33,6 +33,8 @@ class MyRecyclerView(context: Context, attrs: AttributeSet? = null) : ViewGroup(
   
   private lateinit var mAdapter: MyAdapter<*>
   
+  fun getAdapter(): MyAdapter<*>? = if (this::mAdapter.isInitialized) mAdapter else null
+  
   private lateinit var mLayout: MyLayoutManager
   
   private val mRecycler = MyRecycler()
@@ -433,8 +435,9 @@ class MyRecyclerView(context: Context, attrs: AttributeSet? = null) : ViewGroup(
     setMeasuredDimension(measuredWidth, measuredHeight)
   }
   
+  // 1.2.0: getAdapterPositionFoe → getAdapterPositionInRecyclerView
   // ViewHolder 得到 AdapterPosition
-  internal fun getAdapterPositionFoe(holder: MyViewHolder): Int {
+  internal fun getAdapterPositionInRecyclerView(holder: MyViewHolder): Int {
     if ((holder.mFlags and (MyViewHolder.FLAG_INVALID or MyViewHolder.FLAG_REMOVED) != 0)
       || !holder.isBound()
     ) {

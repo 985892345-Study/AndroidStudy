@@ -55,7 +55,8 @@ abstract class MyItemAnimator {
       if (holder.isInvalid()) return FLAG_INVALIDATED
       if ((flags and FLAG_INVALIDATED) == 0) {
         val oldPos = holder.getOldPosition()
-        val pos = holder.getAdapterPosition()
+        // 1.2.0: getAdapterPosition → getAbsoluteAdapterPosition
+        val pos = holder.getAbsoluteAdapterPosition()
         if (oldPos != RecyclerView.NO_POSITION && pos != RecyclerView.NO_POSITION && oldPos != pos) {
           flags = flags or FLAG_MOVED
         }

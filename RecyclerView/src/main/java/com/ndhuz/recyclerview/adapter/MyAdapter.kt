@@ -1,5 +1,6 @@
 package com.ndhuz.recyclerview.adapter
 
+import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.RecyclerView.Adapter
 import com.ndhuz.recyclerview.viewholder.MyViewHolder
 
@@ -36,5 +37,16 @@ abstract class MyAdapter<VH : MyViewHolder> {
   
   fun hasObservers(): Boolean {
     return mObservable.hasObservers()
+  }
+  
+  // 1.2.0 新增
+  // 用于寻找 position 的方法，ConcatAdapter 重写
+  open fun findRelativeAdapterPositionIn(
+    adapter: MyAdapter<*>,
+    holder: MyViewHolder,
+    localPosition: Int
+  ): Int {
+    if (adapter === this) return localPosition
+    return RecyclerView.NO_POSITION
   }
 }

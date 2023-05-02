@@ -5,6 +5,7 @@ import androidx.recyclerview.widget.RecyclerView.NO_ID
 import androidx.recyclerview.widget.RecyclerView.NO_POSITION
 import androidx.recyclerview.widget.RecyclerView.Recycler
 import androidx.recyclerview.widget.RecyclerView.ViewHolder
+import com.ndhuz.recyclerview.adapter.MyAdapter
 import com.ndhuz.recyclerview.view.MyRecyclerView
 
 /**
@@ -34,6 +35,10 @@ abstract class MyViewHolder(
   internal var mInChangeScrap = false
   
   private var mOwnerRecyclerView: MyRecyclerView? = null
+  
+  // 1.2.0 新增
+  // 绑定的 Adapter
+  private var mBindingAdapter: MyAdapter<*>? = null
   
   // 是否已经绑定
   internal fun isBound(): Boolean = (mFlags and FLAG_BOUND) != 0
@@ -75,9 +80,27 @@ abstract class MyViewHolder(
     return if ((mPreLayoutPosition == NO_POSITION)) mPosition else mPreLayoutPosition
   }
   
-  // 获取下一次布局后的位置，如果此时处于即将布局的状态，则使用该方法可以根据 adapter 提交的增删移提前计算出布局后的位置
+  @Deprecated("1.2.0 版本废弃，因为新增了 ConcatAdapter", ReplaceWith("getBindingAdapterPosition()"))
   fun getAdapterPosition(): Int {
-    return mOwnerRecyclerView?.getAdapterPositionFoe(this) ?: NO_POSITION
+//    return mOwnerRecyclerView?.getAdapterPositionInRecyclerView(this) ?: NO_POSITION // 旧版本写法
+    return getBindingAdapterPosition() // 新版本写法
+  }
+  
+  // 1.2.0 新增
+  // 获取下一次布局后的位置，如果此时处于即将布局的状态，则使用该方法可以根据 adapter 提交的增删移提前计算出布局后的位置
+  fun getBindingAdapterPosition(): Int {
+    if (mBindingAdapter == null) return NO_POSITION
+    if (mOwnerRecyclerView == null) return NO_POSITION
+    val rvAdapter = mOwnerRecyclerView!!.getAdapter() ?: return NO_POSITION
+    val globalPosition = mOwnerRecyclerView!!.getAdapterPositionInRecyclerView(this)
+    if (globalPosition == NO_POSITION) return NO_POSITION
+    return rvAdapter.findRelativeAdapterPositionIn(mBindingAdapter!!, this, globalPosition)
+  }
+  
+  // 1.2.0 新增
+  // 获取下一次布局后的位置，与 getBindingAdapterPosition() 类似，但这个是是获得绝对的位置，用于 ConcatAdapter 中
+  fun getAbsoluteAdapterPosition(): Int {
+    return mOwnerRecyclerView?.getAdapterPositionInRecyclerView(this) ?: NO_POSITION
   }
   
   // mPosition 的旧值，但只在 dispatchLayoutStep1() 中执行预测动画时才有效
