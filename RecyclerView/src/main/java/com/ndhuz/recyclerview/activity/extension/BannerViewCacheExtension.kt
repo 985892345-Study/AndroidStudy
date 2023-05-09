@@ -8,7 +8,6 @@ import androidx.recyclerview.widget.RecyclerView.Adapter
 import androidx.recyclerview.widget.RecyclerView.RecycledViewPool
 import androidx.recyclerview.widget.RecyclerView.ViewCacheExtension
 import androidx.recyclerview.widget.RecyclerView.ViewHolder
-import java.lang.Exception
 import java.lang.reflect.Field
 
 /**
@@ -23,14 +22,14 @@ import java.lang.reflect.Field
  * 并且官方没有提供直接设置 [RecyclerView.LayoutParams.mViewHolder] 的方法，只能靠反射写入 holder
  *
  * 3. 虽然 [ViewCacheExtension] 可以拦截某个位置的 View 的获取，
- * 但是在回收时 rv 没有通知 [ViewCacheExtension]，是从二级缓存直接回到到四级缓存 [RecycledViewPool] 中，
+ * 但是在回收时 rv 没有通知 [ViewCacheExtension]，是从二级缓存直接回到四级缓存 [RecycledViewPool] 中，
  * [RecycledViewPool] 根据 [ViewHolder.getItemViewType] 来分别保存，
  * 所以使用 [ViewCacheExtension] 需要设置额外不重复的 ViewType (这个也没提供直接设置的方法，要么用反射，要么改动 Adapter)，
  * 还需要设置 [RecycledViewPool.setMaxRecycledViews] 对应的容量为 0
  *
  *
  * 综上，因为 [ViewCacheExtension] 限制很多，并且需要联合 Adapter 才能正常使用
- * 所以的使用场景很少见，暂时没想到可以使用的地方
+ * 所以使用场景很少见，唯一想到的是配合 setIsRecyclable 一起使用，因为设置不可回收后，在离开屏幕后的 holder 会被直接丢弃
  * 如果想设置 Banner 的话，还不如 ConcatAdapter
  *
  * @author 985892345
@@ -70,15 +69,11 @@ class BannerViewCacheExtension(
         var field = ViewHolderField
         if (field == null) {
           val clazz = RecyclerView.LayoutParams::class.java
-          try {
-            /*
-            * 这样写了后仍然不得行，因为会回调 onBindViewHolder，导致 ViewHolder 强转报错
-            * 所以 ViewCacheExtension 仍然需要与 Adapter 配合，不然绕不过 ViewHolder 问题
-            * */
-            field = clazz.getDeclaredField("mViewHolder")
-          } catch (e: Exception) {
-            throw e
-          }
+          /*
+           * 这样写了后仍然不得行，因为会回调 onBindViewHolder，导致 ViewHolder 强转报错
+           * 所以 ViewCacheExtension 仍然需要与 Adapter 配合，不然绕不过 ViewHolder 问题
+           * */
+          field = clazz.getDeclaredField("mViewHolder")
           field!!.isAccessible = true
           ViewHolderField = field
         }
@@ -87,5 +82,6 @@ class BannerViewCacheExtension(
     }
   }
   
-  class BannerVH(itemView: Banner) : ViewHolder(itemView)
+  class BannerVH(itemView: Banner) : ViewHolder(itemView) {
+  }
 }

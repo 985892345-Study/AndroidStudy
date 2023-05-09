@@ -23,9 +23,11 @@ import kotlin.math.min
 abstract class MyLayoutManager {
   
   private var _recyclerView: MyRecyclerView? = null
-  private val mRecyclerView: MyRecyclerView get() = _recyclerView!!
   
-  private var mChildHelper: MyChildHelper? = null
+  private var _childHelper: MyChildHelper? = null
+  internal val mRecyclerView: MyRecyclerView get() = _recyclerView!!
+  
+  internal val mChildHelper: MyChildHelper get() = _childHelper!!
   
   private var mWidth = 0
   private var mHeight = 0
@@ -35,12 +37,12 @@ abstract class MyLayoutManager {
   internal fun setRecyclerView(recyclerView: MyRecyclerView?) {
     if (recyclerView == null) {
       _recyclerView = null
-      mChildHelper = null
+      _childHelper = null
       mWidth = 0
       mHeight = 0
     } else {
       _recyclerView = recyclerView
-      mChildHelper = recyclerView.mChildHelper
+      _childHelper = recyclerView.mChildHelper
       mWidth = recyclerView.width
       mHeight = recyclerView.height
     }
@@ -136,7 +138,7 @@ abstract class MyLayoutManager {
     var maxX = Int.MIN_VALUE
     var maxY = Int.MIN_VALUE
     repeat(count) {
-      val child = getChildAt(it)!!
+      val child = getChildAt(it)
       val bounds = mRecyclerView.mTempRect
       MyRecyclerView.getDecoratedBoundsWithMarginsInt(child, bounds)
       if (bounds.left < minX) minX = bounds.left
@@ -158,11 +160,11 @@ abstract class MyLayoutManager {
   
   // 返回附加到父 RecyclerView 的当前子视图数。这不包括临时分离和/或废弃的子视图。
   fun getChildCount(): Int {
-    return mChildHelper?.getChildCount() ?: 0
+    return mChildHelper.getChildCount() ?: 0
   }
   
-  fun getChildAt(index: Int): View? {
-    return mChildHelper?.getChildAt(index)
+  fun getChildAt(index: Int): View {
+    return mChildHelper.getChildAt(index)
   }
   
   // 是否支持 item 预测动画 (当项目在布局中添加、删除或移动时，会显示项目的来源和去向)
@@ -193,6 +195,39 @@ abstract class MyLayoutManager {
     recycler.clearScrap()
   }
   
+  // 从 RV 中移除，用于二、四级缓存
+  fun removeViewAt(index: Int) {
+    val child = getChildAt(index)
+    mChildHelper.removeViewAt(index)
+  }
+  
+  // 暂时脱离 RV，脱离后 view.parent = null，用于一级缓存
+  fun detachViewAt(index: Int) {
+    mChildHelper.detachViewFromParent(index)
+  }
+  
+  // 每次在 onLayoutChildren 中调用该方法用于脱离屏幕上所有 holder
+  fun detachAndScrapAttachedViews(recycler: MyRecycler) {
+    val childCount = getChildCount()
+    for (i in childCount - 1 downTo 0) {
+      val v = getChildAt(i)
+      scrapOrRecycleView(recycler, i, v)
+    }
+  }
+  
+  private fun scrapOrRecycleView(recycler: MyRecycler, index: Int, view: View) {
+    val holder = getChildViewHolderInt(view)
+    if (holder.shouldIgnore()) return
+    if (holder.isInvalid() && !holder.isRemoved() && !mRecyclerView.mAdapter.hasStableIds()) {
+      // 如果 holder 非法，但没有被移除，并且没有 stableIds 时将直接回收，最后会回收进四级缓存
+      // 这里一般发生在调用 notifyDataSetChanged 后
+      removeViewAt(index) // 移除 View
+      recycler.recycleViewHolderInternal(holder)
+    } else {
+      detachViewAt(index)
+      recycler.scrapView(view)
+    }
+  }
   
   companion object {
     fun chooseSize(spec: Int, desired: Int, min: Int): Int {

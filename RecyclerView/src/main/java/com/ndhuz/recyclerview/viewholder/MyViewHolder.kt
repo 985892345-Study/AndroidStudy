@@ -1,11 +1,13 @@
 package com.ndhuz.recyclerview.viewholder
 
 import android.view.View
+import androidx.core.view.ViewCompat
+import androidx.recyclerview.widget.RecyclerView.LayoutManager
 import androidx.recyclerview.widget.RecyclerView.NO_ID
 import androidx.recyclerview.widget.RecyclerView.NO_POSITION
-import androidx.recyclerview.widget.RecyclerView.Recycler
 import androidx.recyclerview.widget.RecyclerView.ViewHolder
 import com.ndhuz.recyclerview.adapter.MyAdapter
+import com.ndhuz.recyclerview.recycler.MyRecycler
 import com.ndhuz.recyclerview.view.MyRecyclerView
 
 /**
@@ -24,21 +26,23 @@ abstract class MyViewHolder(
   internal var mOldPosition = NO_POSITION
   internal var mPreLayoutPosition = NO_POSITION
   internal var mItemId = NO_ID
+  private var mIsRecyclableCount = 0
+  private var mItemViewType = 0
   
   // payload 参数
   private val mPayloads = mutableListOf<Any>()
   
   // 如果非空，视图当前被认为是已被回收并且可以被重用。
-  internal var mScrapContainer: Recycler? = null
+  internal var mScrapContainer: MyRecycler? = null
   
-  // 保持此 ViewHolder 是否存在于 ChangeScrap 或 AttachedScrap 中
+  // 此 ViewHolder 是否存在于 ChangeScrap 或 AttachedScrap 中
   internal var mInChangeScrap = false
   
-  private var mOwnerRecyclerView: MyRecyclerView? = null
+  internal var mOwnerRecyclerView: MyRecyclerView? = null
   
   // 1.2.0 新增
   // 绑定的 Adapter
-  private var mBindingAdapter: MyAdapter<*>? = null
+  internal var mBindingAdapter: MyAdapter<*>? = null
   
   // 是否已经绑定
   internal fun isBound(): Boolean = (mFlags and FLAG_BOUND) != 0
@@ -54,6 +58,30 @@ abstract class MyViewHolder(
   
   // 是否已经被移除
   internal fun isRemoved(): Boolean = (mFlags and FLAG_REMOVED) != 0
+  
+  // 是否被临时 detach，出现在放进一级缓存前
+  internal fun isTmpDetached(): Boolean = (mFlags and FLAG_TMP_DETACHED) != 0
+  
+  // 设置回收，里面对回收次数进行判断
+  fun setIsRecyclable(recyclable: Boolean) {
+    mIsRecyclableCount = if (recyclable) mIsRecyclableCount - 1 else mIsRecyclableCount + 1
+    if (mIsRecyclableCount < 0) {
+      mIsRecyclableCount = 0
+    } else if (!recyclable && mIsRecyclableCount == 1) {
+      mFlags = mFlags or FLAG_NOT_RECYCLABLE
+    } else if (recyclable && mIsRecyclableCount == 0) {
+      mFlags = mFlags and FLAG_NOT_RECYCLABLE.inv()
+    }
+  }
+  
+  // 是否可回收
+  fun isRecyclable(): Boolean {
+    return (mFlags and FLAG_NOT_RECYCLABLE) != 0 && !ViewCompat.hasTransientState(itemView)
+  }
+  
+  
+  // 获取类型
+  fun getItemViewType(): Int = mItemViewType
   
   
   /**
@@ -103,7 +131,7 @@ abstract class MyViewHolder(
     return mOwnerRecyclerView?.getAdapterPositionInRecyclerView(this) ?: NO_POSITION
   }
   
-  // mPosition 的旧值，但只在 dispatchLayoutStep1() 中执行预测动画时才有效
+  // mPosition 的旧值，但只在 dispatchLayoutStep1() 中执行预测动画时才有效，其他地方获取都为 NO_POSITION
   fun getOldPosition(): Int {
     return mOldPosition
   }
@@ -113,6 +141,9 @@ abstract class MyViewHolder(
     return mItemId
   }
   
+  fun hasAnyOfTheFlags(flags: Int): Boolean {
+    return (mFlags and flags) != 0
+  }
   
   internal fun setFlags(flags: Int, mask: Int) {
     // mask 中为 1 的位表示对应标志位需要被更新，为 0 的位表示对应标志位保持不变
@@ -125,6 +156,10 @@ abstract class MyViewHolder(
     // setFlags(flags, mask) = setFlags(0, mask) or (flags and mask)
     // 意思就是先去掉 mask 标志，再添加 flags 标志 (一般情况下 flags and mask = flags)
     // 你可以这样用: setFlags(A, A or B or C) 去掉 A、B、C 标志，再添加 A 标志
+  }
+  
+  internal fun addFlags(flags: Int) {
+    mFlags = mFlags or flags
   }
   
   // 添加 payload
@@ -160,6 +195,22 @@ abstract class MyViewHolder(
   // 从回收池中释放
   internal fun clearReturnedFromScrapFlag() {
     mFlags = mFlags and FLAG_RETURNED_FROM_SCRAP.inv()
+  }
+  
+  internal fun resetInternal() {
+    mFlags = 0
+    mPosition = NO_POSITION
+    mOldPosition = NO_POSITION
+    mItemId = NO_ID
+    mPreLayoutPosition = NO_POSITION
+    mIsRecyclableCount = 0
+    clearPayload()
+  }
+  
+  // 放进一级缓存时调用
+  internal fun setScrapContainer(recycler: MyRecycler, isChangeScrap: Boolean) {
+    mScrapContainer = recycler
+    mInChangeScrap = isChangeScrap
   }
 
   companion object {
@@ -204,6 +255,11 @@ abstract class MyViewHolder(
     val FLAG_REMOVED = 1 shl 3
   
     /**
+     * 是否可回收
+     */
+    val FLAG_NOT_RECYCLABLE = 1 shl 4
+  
+    /**
      * 这个 ViewHolder 是从 scrap 返回的，这意味着我们期待这个 itemView 的 addView 调用。
      * 当从 scrap 返回时，ViewHolder 会停留在 scrap 列表中直到布局过程结束，
      * 然后如果它没有被添加回 RecyclerView 则由 RecyclerView 回收。
@@ -216,6 +272,14 @@ abstract class MyViewHolder(
      * 它仍然对 LayoutManager 完全可见。
      */
     val FLAG_IGNORE = 1 shl 7
+  
+    /**
+     * 当视图与父视图分离时，我们设置此标志，以便在需要删除它或将其添加回来时可以采取正确的操作。
+     *
+     * 出现在将 holder 放进一级缓存前设置，可以查看 [LayoutManager.scrapOrRecycleView]
+     */
+    val FLAG_TMP_DETACHED = 1 shl 8
+    
   
     /**
      * 全量更新标志，在调用 [addChangePayload] 传入 null 时设置

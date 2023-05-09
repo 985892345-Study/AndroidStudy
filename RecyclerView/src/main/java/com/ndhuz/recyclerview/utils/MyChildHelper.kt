@@ -52,12 +52,42 @@ class MyChildHelper(callback: Callback) {
     return -1
   }
   
+  internal fun isHidden(view: View): Boolean {
+    return mHiddenViews.contains(view)
+  }
+  
+  private fun unhideViewInternal(child: View) {
+    if (mHiddenViews.remove(child)) {
+      mCallBack
+    }
+  }
+  
+  internal fun removeViewAt(index: Int) {
+    val offset = getOffset(index)
+    if (mBucket.remove(offset)) {
+      // ...
+    }
+    mCallBack.removeViewAt(index)
+  }
+  
+  internal fun detachViewFromParent(index: Int) {
+    val offset = getOffset(index)
+    mBucket.remove(offset)
+    mCallBack.detachViewFromParent(index)
+  }
+  
   interface Callback {
     
     // 最后调用的 RecyclerView#getChildCount
     fun getChildCount(): Int
     
+    // 移除 view
+    fun removeViewAt(index: Int)
+    
     // 最后调用的 RecyclerView#getChildAt
     fun getChildAt(offset: Int): View
+    
+    // 暂时分离子 View
+    fun detachViewFromParent(offset: Int)
   }
 }

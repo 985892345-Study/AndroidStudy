@@ -33,6 +33,7 @@ android {
 dependencies {
 
   implementation "androidx.recyclerview:recyclerview:1.3.0"
+//  implementation "androidx.recyclerview:recyclerview:1.2.0"
 
   // 一个管理 View 生命周期帮助类，1.3.0 版本的 rv 用到了这个东西，也可以不导入，只会有部分代码报红
   // https://developer.android.com/jetpack/androidx/releases/customview?hl=zh-cn

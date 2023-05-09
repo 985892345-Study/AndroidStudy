@@ -12,7 +12,9 @@ import androidx.recyclerview.widget.RecyclerView.ViewCacheExtension
 import androidx.recyclerview.widget.RecyclerView.ViewHolder
 import com.ndhuz.recyclerview.activity.extension.BannerViewCacheExtension
 import com.ndhuz.recyclerview.adapter.MyAdapter
+import com.ndhuz.recyclerview.view.MyRecyclerView
 import com.ndhuz.recyclerview.viewholder.MyViewHolder
+import java.lang.IllegalArgumentException
 
 /**
  * .
@@ -20,7 +22,9 @@ import com.ndhuz.recyclerview.viewholder.MyViewHolder
  * @author 985892345
  * 2023/4/4 11:16
  */
-class MyRecycler {
+class MyRecycler(
+  val rv: MyRecyclerView // 源码中 Recycler 是作为 RV 的内部类，这里进行了分离
+) {
   
   // 一级缓存
   /**
@@ -40,6 +44,8 @@ class MyRecycler {
    * 然后等待重新布局，并不会调用 onBindViewHolder
    *
    * notifyItemMoved 与 notifyItemInserted 处理基本一致
+   *
+   * 一级缓存中的 view 会被暂时分离 RV，调用的 ViewGroup.detachViewFromParent()，此时 view.parent = null
    *
    *
    * /// 一级缓存触发的地方主要在 [LayoutManager.detachAndScrapAttachedViews]，当然也包含其他地方，只是没这里重要
@@ -86,9 +92,11 @@ class MyRecycler {
   
   // 二级缓存
   /**
-   * 二级缓存只保存离开屏幕且不带有任何 移除、更新、非法标志的 holder，默认容量为 2 个
+   * 二级缓存只保存最近离开屏幕且不带有任何 移除、更新、非法标志的 holder，默认容量为 2 个
    *
-   * 如果超出容量会移除最先进来的那个 holder 到第四级缓存 [RecycledViewPool] 中去 (移除第一个)
+   * 移到二级缓存前要求 View 已经被 RV 彻底移除，即 view.parent = null
+   *
+   * 如果超出容量会移除最先进来的那个 holder (移除第一个) 到第四级缓存 [RecycledViewPool] 中去
    *
    *
    * /// 二级缓存触发的地方在 [Recycler.recycleViewHolderInternal]
@@ -117,7 +125,7 @@ class MyRecycler {
    * /// 但一般是在二级缓存装满时把二级缓存中第一个移到四级缓存中，具体逻辑可看 [Recycler.recycleViewHolderInternal]
    * /// 或者不满足二级缓存条件，会直接移到四级缓存
    */
-  private val mRecyclerViewPool: MyRecyclerViewPool = MyRecyclerViewPool()
+  private lateinit var mRecyclerViewPool: MyRecyclerViewPool
   
   
   // 清理 holder 旧的位置信息，由 dispatchLayoutStep1 中调用
@@ -125,6 +133,25 @@ class MyRecycler {
     mCachedView.forEach { it.clearOldPosition() }
     mAttachedScrap.forEach { it.clearOldPosition() }
     mChangedScrap.forEach { it.clearPayload() }
+  }
+  
+  // 一级缓存核心方法
+  internal fun scrapView(view: View) {
+    val holder = MyRecyclerView.getChildViewHolderInt(view)
+    // 这个 canReuseUpdatedViewHolder 源码中包含下面这几个判断
+    val canReuseUpdatedViewHolder = rv.mItemAnimator == null || holder.getUnmodifiedPayloads().isNotEmpty() || holder.isInvalid()
+    if (holder.isRemoved() || holder.isInvalid() || !holder.isUpdate() || canReuseUpdatedViewHolder) {
+      if (holder.isInvalid() && !holder.isRemoved() && !rv.mAdapter.hasStableIds()) {
+        // 如果 holder 非法，但没有被移除，并且没有 stableIds 时将直接回收，应该回收进四级缓存，而不是一级缓存
+        throw IllegalArgumentException()
+      }
+      holder.setScrapContainer(this, false)
+      mAttachedScrap.add(holder)
+    } else {
+      // 这里一般是不带有 payload 的更新时才进入
+      holder.setScrapContainer(this, true)
+      mChangedScrap.add(holder)
+    }
   }
   
   // 从符合条件的 scrap 池中移除先前的 holder。
@@ -151,5 +178,59 @@ class MyRecycler {
   internal fun clearScrap() {
     mAttachedScrap.clear()
     mChangedScrap.clear()
+  }
+  
+  // 二级缓存核心方法
+  internal fun recycleViewHolderInternal(holder: MyViewHolder) {
+    check(holder.itemView.parent == null) // 回收时不允许 view 没有被移除
+    check(holder.isTmpDetached())
+    check(holder.shouldIgnore())
+    var cached = false
+    var recycled = false
+    if (holder.isRecyclable()) {
+      // 还包括其他判断，这里只给出重要判断
+      if (!(holder.isInvalid() || holder.isRemoved() || holder.isUpdate())) {
+        var cachedViewSize = mCachedView.size
+        if (cachedViewSize >= 2) {
+          // mCachedView 默认大小为 2，大于 2 的会回收进四级缓存
+          recycleCachedViewAt(0) // 先回收最先进来的
+          cachedViewSize--
+        }
+        // ...
+        mCachedView.add(cachedViewSize, holder)
+        cached = true
+      }
+      if (!cached) {
+        addViewHolderToRecycledViewPool(holder, true)
+        recycled = true
+      }
+    } else {
+      // 如果有移动动画，则可能会进入这个分支，但移动动画最后会在动画结束时自动回收
+      // 如果是自己调用了 setIsRecyclable 导致的不可回收也会进入该分支，但需要自己进行管理，否则将直接丢弃
+    }
+    rv.mViewInfoStore.removeViewHolder(holder)
+    if (!cached && !recycled) {
+      holder.mBindingAdapter = null
+      holder.mOwnerRecyclerView = null
+    }
+  }
+  
+  internal fun recycleCachedViewAt(cachedViewIndex: Int) {
+    val holder = mCachedView[cachedViewIndex]
+    addViewHolderToRecycledViewPool(holder, true)
+    mCachedView.removeAt(cachedViewIndex)
+  }
+  
+  internal fun addViewHolderToRecycledViewPool(holder: MyViewHolder, dispatchRecycled: Boolean) {
+    getRecycledViewPool().putRecycledView(holder)
+  }
+  
+  fun getRecycledViewPool(): MyRecyclerViewPool {
+    if (!this::mRecyclerViewPool.isInitialized) {
+      mRecyclerViewPool = MyRecyclerViewPool()
+      // ...
+      mRecyclerViewPool.attachForPoolingContainer(rv.mAdapter)
+    }
+    return mRecyclerViewPool
   }
 }

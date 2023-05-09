@@ -6,7 +6,6 @@ import android.util.AttributeSet
 import android.view.View
 import android.view.ViewGroup
 import androidx.core.view.ViewCompat
-import androidx.recyclerview.widget.DefaultItemAnimator
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.SimpleItemAnimator
 import com.ndhuz.recyclerview.adapter.MyAdapter
@@ -24,6 +23,9 @@ import com.ndhuz.recyclerview.viewholder.MyViewHolder
 /**
  * [RecyclerView]
  *
+ * 整体：
+ * https://juejin.cn/post/6844903910553944078
+ *
  * 布局：
  * https://juejin.cn/post/6931894526160142350
  * https://juejin.cn/post/6910128327681474567
@@ -33,13 +35,14 @@ import com.ndhuz.recyclerview.viewholder.MyViewHolder
  */
 class MyRecyclerView(context: Context, attrs: AttributeSet? = null) : ViewGroup(context, attrs) {
   
-  private lateinit var mAdapter: MyAdapter<*>
+  internal lateinit var mAdapter: MyAdapter<*>
   
   fun getAdapter(): MyAdapter<*>? = if (this::mAdapter.isInitialized) mAdapter else null
   
   private lateinit var mLayout: MyLayoutManager
   
-  private val mRecycler = MyRecycler()
+  // Recycler 源码中为 rv 的内部类，这里分离了，所以传入 rv
+  private val mRecycler = MyRecycler(this)
   
   private val mState = MyState()
   
@@ -55,16 +58,35 @@ class MyRecyclerView(context: Context, attrs: AttributeSet? = null) : ViewGroup(
   private var mAdapterUpdateDuringMeasure = false
   
   // item 动画
-  private var mItemAnimator: MyItemAnimator? = MyDefaultItemAnimator()
+  internal var mItemAnimator: MyItemAnimator? = MyDefaultItemAnimator()
   
   internal val mChildHelper = MyChildHelper(
     object : MyChildHelper.Callback {
       override fun getChildCount(): Int {
         return this@MyRecyclerView.childCount
       }
-      
+  
+      override fun removeViewAt(index: Int) {
+        val child = this@MyRecyclerView.getChildAt(index)
+        if (child != null) {
+          // dispatchChildDetached(child);
+          child.clearAnimation()
+        }
+        this@MyRecyclerView.removeViewAt(index)
+      }
+  
       override fun getChildAt(offset: Int): View {
         return this@MyRecyclerView.getChildAt(offset)
+      }
+  
+      override fun detachViewFromParent(offset: Int) {
+        val view = this@MyRecyclerView.getChildAt(offset)
+        if (view != null) {
+          val holder = getChildViewHolderInt(view)
+          // 添加暂时脱离 RV 的标志，后面会根据该标志彻底移除 view
+          holder.addFlags(MyViewHolder.FLAG_TMP_DETACHED)
+        }
+        this@MyRecyclerView.detachViewFromParent(offset)
       }
     }
   )
@@ -75,7 +97,7 @@ class MyRecyclerView(context: Context, attrs: AttributeSet? = null) : ViewGroup(
     }
   )
   
-  private val mViewInfoStore = MyViewInfoStore()
+  internal val mViewInfoStore = MyViewInfoStore()
   
   override fun onMeasure(widthSpec: Int, heightSpec: Int) {
     if (!this::mLayout.isInitialized) {
@@ -159,7 +181,12 @@ class MyRecyclerView(context: Context, attrs: AttributeSet? = null) : ViewGroup(
         return
       }
       
-      // ...
+      if (this::mAdapter.isInitialized) {
+        mState.mItemCount = mAdapter.getItemCount()
+      } else {
+        mState.mItemCount = 0
+      }
+      
       // 抑制布局
       startInterceptRequestLayout()
       /// 前面处理了动画，最后调用 LayoutManager.onMeasure() 进行自定义布局
@@ -187,9 +214,9 @@ class MyRecyclerView(context: Context, attrs: AttributeSet? = null) : ViewGroup(
       // 一次性应用所有更新
       mAdapterHelper.consumeUpdatesInOnePass()
     }
-    // 源码中这里有一堆判断，如果是添加、删除或修改就会执行动画
+    // 是否开启淡入淡出动画，源码中这里有一堆判断，如果是添加、删除或修改就会执行动画
     mState.mRunSimpleAnimations = mItemAnimator != null
-    // 源码中这里有一堆判断
+    // 是否开启移动动画，源码中这里有一堆判断
     mState.mRunPredictiveAnimations = mState.mRunSimpleAnimations
       && predictiveItemAnimationsEnabled()
   }
@@ -269,8 +296,10 @@ class MyRecyclerView(context: Context, attrs: AttributeSet? = null) : ViewGroup(
     processAdapterUpdatesAndSetAnimationFlags()
     mState.mTrackOldChangeHolders = mState.mRunSimpleAnimations && mItemsChanged
     mItemsChanged = false
-    /// 记录预布局状态到 State 中
+    /// 记录预布局状态到 State 中，只有需要移动动画的才会开启预布局
     mState.mInPreLayout = mState.mRunPredictiveAnimations
+    mState.mItemCount = mAdapter.getItemCount()
+    
     // ...
     if (mState.mRunSimpleAnimations) {
       /*
@@ -374,6 +403,8 @@ class MyRecyclerView(context: Context, attrs: AttributeSet? = null) : ViewGroup(
     startInterceptRequestLayout()
     // 一次性应用所有更新
     mAdapterHelper.consumeUpdatesInOnePass()
+    mState.mItemCount = mAdapter.getItemCount()
+    mState.mDeletedInvisibleItemCountSincePreviousLayout = 0
     // ...
     mState.mInPreLayout = false
     /// 正式布局
@@ -402,6 +433,7 @@ class MyRecyclerView(context: Context, attrs: AttributeSet? = null) : ViewGroup(
       for (i in 0 until mChildHelper.getChildCount()) {
         val holder = getChildViewHolderInt(mChildHelper.getChildAt(i))
         if (holder.shouldIgnore()) continue
+        /// 通过 key 来找到对应值，在有 hasStableIds 时使用 stableId，没有时使用 mPosition 判断
         val key = getChangedHolderKey(holder)
         val animationInfo = mItemAnimator!!.recordPostLayoutInformation(mState, holder)
         val oldChangeViewHolder = mViewInfoStore.getFromOldChangeHolders(key)
@@ -413,6 +445,7 @@ class MyRecyclerView(context: Context, attrs: AttributeSet? = null) : ViewGroup(
           val newDisappearing = mViewInfoStore.isDisappearing(holder)
           if (oldDisappearing && oldChangeViewHolder === holder) {
             // 如果 holder 被移除了，就不再运行更新动画，直接运行 disappear 动画
+            // 如果 oldChangeViewHolder 跟 holder 是同一个则只记录 post layout 信息，然后执行移动动画
             mViewInfoStore.addToPostLayout(holder, animationInfo)
           } else {
             val preInfo = mViewInfoStore.popFromPreLayout(oldChangeViewHolder)
@@ -439,6 +472,7 @@ class MyRecyclerView(context: Context, attrs: AttributeSet? = null) : ViewGroup(
     
     /// 回收一级缓存
     mLayout.removeAndRecycleScrapInt(mRecycler)
+    mState.mPreviousLayoutItemCount = mState.mItemCount
     mState.mRunSimpleAnimations = false
     mState.mRunPredictiveAnimations = false
     mRecycler.mChangedScrap.clear()
@@ -645,8 +679,6 @@ class MyRecyclerView(context: Context, attrs: AttributeSet? = null) : ViewGroup(
   ) {
     /**
      * 触发 mItemAnimator.animateChange()
-     *
-     * 如果 oldHolder === newHolder，则只执行移动动画，代码逻辑可看 [DefaultItemAnimator.animateChange]
      */
   }
   

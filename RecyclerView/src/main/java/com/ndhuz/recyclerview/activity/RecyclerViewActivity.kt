@@ -2,12 +2,13 @@ package com.ndhuz.recyclerview.activity
 
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
-import android.widget.Button
-import android.widget.EditText
+import androidx.recyclerview.widget.ConcatAdapter
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.RecyclerView.RecycledViewPool
 import com.ndhuz.recyclerview.R
+import com.ndhuz.recyclerview.activity.adapter.BannerAdapter
+import com.ndhuz.recyclerview.activity.adapter.ListItemAdapter
 import com.ndhuz.recyclerview.activity.adapter.PageAdapter
 
 class RecyclerViewActivity : AppCompatActivity() {
@@ -16,15 +17,18 @@ class RecyclerViewActivity : AppCompatActivity() {
     setContentView(R.layout.activity_recyclerview)
     
     val rv: RecyclerView = findViewById(R.id.rv)
-    rv.layoutManager = LinearLayoutManager(this, RecyclerView.HORIZONTAL, false)
-    rv.adapter = PageAdapter(rv)
-    rv.setRecycledViewPool(PageRecycledViewPool())
+    rv.layoutManager = LinearLayoutManager(this)
+    rv.adapter = ConcatAdapter(BannerAdapter(), ListItemAdapter())
     
-    val et: EditText = findViewById(R.id.et)
-    val btn: Button = findViewById(R.id.btn)
-    btn.setOnClickListener {
-      rv.adapter!!.notifyItemChanged(et.text.toString().toInt(), "")
-    }
+    
+//    rv.adapter = PageAdapter(rv)
+//    rv.setRecycledViewPool(PageRecycledViewPool())
+//
+//    val et: EditText = findViewById(R.id.et)
+//    val btn: Button = findViewById(R.id.btn)
+//    btn.setOnClickListener {
+//      rv.adapter!!.notifyItemChanged(et.text.toString().toInt(), "")
+//    }
   }
   
   class PageRecycledViewPool : RecycledViewPool() {
