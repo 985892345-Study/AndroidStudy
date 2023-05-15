@@ -1,4 +1,5 @@
 /// system/core/libutils/Looper.cpp
+/// https://cs.android.com/android/platform/superproject/+/master:system/core/libutils/Looper.cpp
 
 //
 // Copyright 2010 The Android Open Source Project
@@ -101,6 +102,8 @@ void Looper::rebuildEpollLocked() {
     /// 3、将唤醒事件 fd (mWakeEventFd) 添加到 epoll 文件描述符 (mEpollFd) 中
     int result = epoll_ctl(mEpollFd.get(), EPOLL_CTL_ADD, mWakeEventFd.get(), &wakeEvent);
     // ...
+
+    /// 4. 除了监听 mWakeEventFd 外，还监听了其他的 fd，比如键盘输入等事件
 }
 
 /// 被 NativeMessageQueue::pollOnce 调用

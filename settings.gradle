@@ -10,6 +10,7 @@ dependencyResolutionManagement {
   repositories {
     google()
     mavenCentral()
+    jcenter()
   }
 }
 rootProject.name = "Android-Study"
@@ -21,3 +22,4 @@ include ':SparseArray'
 include ':ArrayMap'
 include ':RecyclerView'
 include ':Binder'
+include ':XposedDebugger'

@@ -17,6 +17,7 @@
             <option value="$PROJECT_DIR$/RecyclerView" />
             <option value="$PROJECT_DIR$/SparseArray" />
             <option value="$PROJECT_DIR$/ThreadLocal" />
+            <option value="$PROJECT_DIR$/XposedDebugger" />
             <option value="$PROJECT_DIR$/app" />
           </set>
         </option>

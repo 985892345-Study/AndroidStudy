@@ -1,4 +1,5 @@
 /// frameworks/base/core/jni/android_os_MessageQueue.cpp
+/// https://cs.android.com/android/platform/superproject/+/master:frameworks/base/core/jni/android_os_MessageQueue.cpp
 
 /*
  * Copyright (C) 2010 The Android Open Source Project
