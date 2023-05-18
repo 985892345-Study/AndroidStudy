@@ -2,6 +2,8 @@ package com.ndhuz.recyclerview.activity
 
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
+import android.widget.Button
+import android.widget.EditText
 import androidx.recyclerview.widget.ConcatAdapter
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -17,18 +19,20 @@ class RecyclerViewActivity : AppCompatActivity() {
     setContentView(R.layout.activity_recyclerview)
     
     val rv: RecyclerView = findViewById(R.id.rv)
-    rv.layoutManager = LinearLayoutManager(this)
-    rv.adapter = ConcatAdapter(BannerAdapter(), ListItemAdapter())
+    rv.layoutManager = LinearLayoutManager(this, RecyclerView.HORIZONTAL, false)
+//    rv.adapter = ConcatAdapter(BannerAdapter(), ListItemAdapter())
     
-    
-//    rv.adapter = PageAdapter(rv)
-//    rv.setRecycledViewPool(PageRecycledViewPool())
-//
-//    val et: EditText = findViewById(R.id.et)
-//    val btn: Button = findViewById(R.id.btn)
-//    btn.setOnClickListener {
-//      rv.adapter!!.notifyItemChanged(et.text.toString().toInt(), "")
-//    }
+    val adapter = PageAdapter(rv)
+    rv.adapter = adapter
+    rv.setRecycledViewPool(PageRecycledViewPool())
+
+    val et: EditText = findViewById(R.id.et)
+    val btn: Button = findViewById(R.id.btn)
+    btn.setOnClickListener {
+      adapter.notifyItemChanged(et.text.toString().toInt())
+      android.util.Log.d("ggg", "(${Exception().stackTrace[0].run { "$fileName:$lineNumber" }}) -> " +
+        "mCacheViews = ${adapter.mCacheViews}   mViewCacheMax = ${adapter.mViewCacheMax}")
+    }
   }
   
   class PageRecycledViewPool : RecycledViewPool() {

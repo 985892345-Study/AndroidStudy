@@ -24,7 +24,7 @@ abstract class MyViewCacheExtension {
    * 如果需要，RecyclerView 会重新绑定返回的 View 到该位置。
    */
   abstract fun getViewForPositionAndType(
-    recycler: Recycler,
+    recycler: MyRecycler,
     position: Int,
     type: Int
   ): View?

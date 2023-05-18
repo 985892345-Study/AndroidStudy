@@ -1,5 +1,6 @@
 package com.ndhuz.recyclerview.adapter
 
+import android.view.ViewParent
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.RecyclerView.Adapter
 import com.ndhuz.recyclerview.viewholder.MyViewHolder
@@ -35,6 +36,10 @@ abstract class MyAdapter<VH : MyViewHolder> {
     mHasStableIds = hasStableIds
   }
   
+  open fun getItemId(position: Int): Long {
+    return RecyclerView.NO_ID
+  }
+  
   fun hasObservers(): Boolean {
     return mObservable.hasObservers()
   }
@@ -48,5 +53,18 @@ abstract class MyAdapter<VH : MyViewHolder> {
   ): Int {
     if (adapter === this) return localPosition
     return RecyclerView.NO_POSITION
+  }
+  
+  open fun getItemViewType(position: Int): Int {
+    return 0
+  }
+  
+  fun createViewHolder(parent: ViewParent, viewType: Int): VH {
+    // 调用 onCreateViewHolder
+    TODO()
+  }
+  
+  fun bindViewHolder(holder: VH, position: Int) {
+    // 调用 onBindViewHolder
   }
 }

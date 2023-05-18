@@ -44,7 +44,7 @@ class MyRecyclerView(context: Context, attrs: AttributeSet? = null) : ViewGroup(
   // Recycler 源码中为 rv 的内部类，这里分离了，所以传入 rv
   private val mRecycler = MyRecycler(this)
   
-  private val mState = MyState()
+  internal val mState = MyState()
   
   // 是否存在 item 内容发生了更新
   private var mItemsChanged = false
@@ -477,11 +477,14 @@ class MyRecyclerView(context: Context, attrs: AttributeSet? = null) : ViewGroup(
     mState.mRunPredictiveAnimations = false
     mRecycler.mChangedScrap.clear()
     
+    // ... 预取还原相关逻辑
+    
     /// 通知布局结束
     mLayout.onLayoutCompleted(mState)
     // 抑制布局结束
     stopInterceptRequestLayout(false)
     mViewInfoStore.clear()
+    // ...
   }
   
   

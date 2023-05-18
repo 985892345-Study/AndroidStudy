@@ -79,6 +79,11 @@ abstract class MyViewHolder(
     return (mFlags and FLAG_NOT_RECYCLABLE) != 0 && !ViewCompat.hasTransientState(itemView)
   }
   
+  // 是否正在动画的 Overlay 层中
+  fun isAttachedToTransitionOverlay(): Boolean {
+    return itemView.parent != null && itemView.parent != mOwnerRecyclerView
+  }
+  
   
   // 获取类型
   fun getItemViewType(): Int = mItemViewType

@@ -211,10 +211,12 @@ abstract class MyLayoutManager {
     val childCount = getChildCount()
     for (i in childCount - 1 downTo 0) {
       val v = getChildAt(i)
+      // 回收进一级缓存或者回收进四级缓存
       scrapOrRecycleView(recycler, i, v)
     }
   }
   
+  // 将 View 放进一级缓存，如果当前 holder 无效、没有被移除并且 adapter 没有 StableId 时，将进行回收，会直接进入四级缓存 (因为二级缓存不回收无效的 holder)
   private fun scrapOrRecycleView(recycler: MyRecycler, index: Int, view: View) {
     val holder = getChildViewHolderInt(view)
     if (holder.shouldIgnore()) return
@@ -228,6 +230,40 @@ abstract class MyLayoutManager {
       recycler.scrapView(view)
     }
   }
+  
+  
+  
+  fun addView(child: View) {
+    addView(child, -1)
+  }
+  
+  fun addView(child: View, index: Int) {
+    // 添加 view 进 rv，这里面主要调用 ChildHelper 添加 view
+  }
+  
+  // 仅在 onLayoutChildren(RecyclerView.Recycler, RecyclerView.State) 期间调用，以将视图添加到已知将要消失的布局中
+  fun addDisappearingView(child: View) {
+    addDisappearingView(child, -1)
+  }
+  
+  fun addDisappearingView(child: View, index: Int) {
+    val holder = getChildViewHolderInt(child)
+    mRecyclerView.mViewInfoStore.addToDisappearedInLayout(holder)
+    // ...
+  }
+  
+  // 测量子 view
+  fun measureChildWithMargins(child: View, widthUsed: Int, heightUsed: Int) {
+  }
+  
+  // 布局子 view
+  fun layoutDecoratedWithMargins(child: View, left: Int, top: Int, right: Int, bottom: Int) {
+  }
+  
+  // 回收子 view
+  fun removeAndRecycleViewAt(index: Int, recycler: MyRecycler) {
+  }
+  
   
   companion object {
     fun chooseSize(spec: Int, desired: Int, min: Int): Int {

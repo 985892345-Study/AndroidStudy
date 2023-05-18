@@ -52,7 +52,7 @@ dependencies {
 
 def adbExecutable = androidComponents.sdkComponents.adb.get().asFile.absolutePath
 
-def restartAndroidStudy = task("restartAndroidStudy").apply {
+def restartAndroidStudy = task("restartAndroidStudy") {
   doLast {
     exec {
       commandLine(adbExecutable, "shell", "am", "force-stop", "com.ndhuz.android.study")

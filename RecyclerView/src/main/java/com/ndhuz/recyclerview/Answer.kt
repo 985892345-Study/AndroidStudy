@@ -130,82 +130,107 @@ package com.ndhuz.recyclerview
 * 基本原理为：rv 通过在手指触摸和滑动中通知 GapWorker 发送一个 Runnable 来提前加载附近的 holder 到缓存中
 *
 *
+* /// Recycler 中获取 ViewHolder 的步骤 ?
+* 1. 如果是预布局，先从 ChangedScrap 中寻找 holder
+* 2. 从 mAttachedScrap 和 mCachedViews 中寻找相同位置的 holder
+* 3. 如果 Adapter 设置了 StableIds，则使用 item 的 id 再次在 mAttachedScrap 和 mCachedViews 中寻找
+* 4. 如果设置了 mViewCacheExtension，则从第三级缓存中寻找
+* 5. 从第四级缓存 RecyclerViewPool 中寻找
+* 6. 最后调用 createViewHolder 创建新的 ViewHolder
+*
+*
+* /// LinearLayoutManager 的 onLayoutChildren 流程 ?
+* 1. 首先计算锚点信息
+* 2. 然后脱离所有的 View 到一级缓存或者四级缓存
+* 3. 根据布局方向从锚点先向后填充，再向前填充
+* 4. 最后如果还有额外空间，就向后填充更多的子 View
+* 5. 如果开启了预测动画，即 item 的移动动画，则在 layoutForPredictiveAnimations 方向中对一级缓存 mAttachScrap 中没有被移除的 holder 继续进行布局
+*   (这个对应了上文 RV 的布局流程 中的 2.2)
+*
+*
+* /// LinearLayoutManager 怎么寻找的锚点 ?
+* https://juejin.cn/post/7034454792508440584#heading-3
+* 1. 首先如果有待处理的滚动位置或已保存的状态，锚点就为 mPendingScrollPosition，需要滚动到的 item 位置
+*   (updateAnchorFromPendingData)
+* 2. 如果不满足第一分支，就会遍历寻找一个没有被移除的 holder，优先在屏幕内寻找，然后寻找屏幕外的，如果都没找到，则只能用被移除的 holder
+*   (updateAnchorFromChildren -> findReferenceChild)
+* 3. 如果第一第二分支都不满足，则根据布局方向放回 0 或者是 itemCount - 1 (第一次布局或者布局方向发生改变时才触发)
+*
+*
 * /// LinearLayoutManager 的 holder 加载流程 ?
 * 这里以单个 holder 占一页来记录 (就像 VP2 一样)，一页如果有多个 holder，其实逻辑是一样的
 *
-* //# 第 1 个 holder 的创建在 dispatchLayoutStep2 时触发，记为 A
-* onLayout -> dispatchLayoutStep2 -> LayoutManager.onLayoutChildren ->
-* 调用 fill 方法布局，布局时会调用 Recycler.tryGetViewHolderForPositionByDeadline ->
-* 因为是第 1 个没缓存所以回调 createViewHolder
+* 有三种触发 onCreate 操作：
+* 1. onLayout -> dispatchLayoutStep2 -> LayoutManager.onLayoutChildren -> fill -> Recycler.tryGetViewHolderForPositionByDeadline
+* 2. onTouchEvent -> scrollByInternal -> LayoutManager.scrollHorizontallyBy -> fill -> Recycler.tryGetViewHolderForPositionByDeadline
+* 3. 预取操作 GapWorker.prefetch -> Recycler.tryGetViewHolderForPositionByDeadline
 *
-* 当前处于第 0 页
-*
+* //# 初始时第一页直接加载第一页
+* onLayout 触发 onCreate
 * onCreate(A)
 * onBind(A)
-* 二级缓存: []
 *
-*
-* //# 第 2 个 holder 是在滑动时触发，记为 B
-* onTouchEvent -> scrollByInternal -> LayoutManager.scrollHorizontallyBy ->
-* 仍然是调用 fill 方法布局，布局时会调用 Recycler.tryGetViewHolderForPositionByDeadline ->
-* 因为没缓存所以回调 createViewHolder
-*
-* 滑进部分第 1 页时
-*
+* //# 部分滑进第二页
+* onTouchEvent 触发 onCreate
 * onCreate(B)
 * onBind(B)
-* 二级缓存: []
 *
-*
-* //# 第 3 个 holder 也是在滑动时触发，记为 C
-*
-* 预取
-*
+* 预取 触发 onCreate
 * onCreate(C)
-* 二级缓存: [C]
-*
-* 滑进部分第 2 页时
-*
 * onBind(C)
-* 二级缓存: []
+* 二级缓存: [C] // 预取操作会先放进二级缓存中
 *
-* //# 第 4 个 holder 也是在滑动时触发，记为 D
+* //# 部分滑进第三页
+* 二级缓存: [A] // 因为 A 已经滑出屏幕，所以进行回收
+* 这里直接把刚才预取的 C 拿来用了
 *
-* 预取
-*
-* 二级缓存: [A]
+* 预取 触发 onCreate
 * onCreate(D)
-* 二级缓存: [A, D]
-*
-* 滑进部分第 3 页时
-*
 * onBind(D)
-* 二级缓存: [A]
+* 二级缓存: [A, D] // D 是预取的，所以仍然先放进二级缓存
 *
-* //# 第 5 个 holder 也是在滑动时触发，记为 E
+* //# 部分滑进第四页
+* 二级缓存: [A, B] // A, B 都滑出屏幕
+* 这里直接把刚才预取的 D 拿来用了
 *
-* 预取
-*
-* 二级缓存: [A, B]
+* 预取 触发 onCreate
 * onCreate(E)
-* 二级缓存: [A, B, E]
-*
-* 滑进部分第 4 页时
-*
 * onBind(E)
-* 二级缓存: [A, B]
+* 二级缓存: [A, B, E] // mViewCacheMax 暂时设置为 3，由 GapWorker 设置，会在 dispatchLayout3 时还原
 *
-* 隔了一段时间
-*
+* //# 部分滑进第五页
 * 四级缓存: [A]
-* onBind(A) position = 5，注意此时并没有滑进第 5 页
 * 二级缓存: [B, C]
 *
-* 滑进第 5 页
+* 预取 触发 onBind  // 注意这里是预取触发的 onBind
+* onBind(A) // 直接从四级缓存中复用 A
 *
-* 四级缓存: [B]
-* onBind(B) position = 6
-* 二级缓存: [C, D]
+* //# ... 后面依次规律进行
 *
-* //# 上面这些原因在 LinearLayoutManager 中，后面有时间再来详细分析
+*
+*
+* /// 记录下 LinearLayoutManager 在第一页直接触发 notifyItemChanged(0) 的过程
+* //# 初始时第一页直接加载第一页
+* onLayout 触发 onCreate
+* onCreate(A)
+* onBind(A)
+*
+* //# 触发 notifyItemChanged(0) 后，会先加载第二页
+* 1. rv.mObserver.onItemRangeChanged()
+* 2. mAdapterHelper.onItemRangeChanged() 记录 UPDATE
+* 3. dispatchLayoutStep1() 中调用 mAdapterHelper.consumeUpdatesInOnePass()，让 mAdapterHelper 中的所有记录标记到对应的 holder，
+*   UPDATE 记录将对应 holder 标记为 FLAG_UPDATE
+* 4. dispatchLayoutStep1() 因为默认开启了预测动画，则进行预布局，调用 onLayoutChildren()
+* 5. fill() 方法中有个循环，其中有个 remainingSpace 表示剩余的空间，而后面有三个判断满足后就会削减改值：
+*   5.1. !layoutChunkResult.mIgnoreConsumed // 这个在 layoutChunk 中进行了赋值，更好在 holder 是 FLAG_UPDATE 时为 true，取反后就为 false
+*   5.2. layoutState.mScrapList != null // 这个跟 mAttachScrap 有关，不是关键，为 false
+*   5.3. !state.isPreLayout() // 此时更好属于预布局，取反后为 false
+* 6. 所以 remainingSpace 没有减少，就直接把 第二页(B) 给加载出来了
+*
+* //# 加载名字为 C 的 holder
+* 因为 A 是不带 payload 的 UPDATE，所以会被放进 mChangedScrap，该 scrap 只会在预布局中使用，
+* 所以在 dispatchLayoutStep2 正式布局时因为没有缓存就会调用 onCreate 生成新的 holder，即 C
+*
+* //# A 被放进四级缓存
+* 最后在 A 淡出动画结束时会回收进四级缓存，因为有 UPDATE 标签所以会跳过二级缓存
 * */

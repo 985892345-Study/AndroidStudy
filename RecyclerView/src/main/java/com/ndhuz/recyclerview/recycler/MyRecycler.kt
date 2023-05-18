@@ -12,6 +12,7 @@ import androidx.recyclerview.widget.RecyclerView.ViewCacheExtension
 import androidx.recyclerview.widget.RecyclerView.ViewHolder
 import com.ndhuz.recyclerview.activity.extension.BannerViewCacheExtension
 import com.ndhuz.recyclerview.adapter.MyAdapter
+import com.ndhuz.recyclerview.utils.MyLayoutParams
 import com.ndhuz.recyclerview.view.MyRecyclerView
 import com.ndhuz.recyclerview.viewholder.MyViewHolder
 import java.lang.IllegalArgumentException
@@ -60,6 +61,12 @@ class MyRecycler(
    * - [MyViewHolder.isUpdate] = false，受 notifyItemMoved()、notifyItemInserted() 影响的 holder
    * - [MyViewHolder.mPayloads] 不为空时 (原因在 [DefaultItemAnimator.canReuseUpdatedViewHolder])
    *
+   * 简单来说：
+   * //# holder 放进 mAttachedScrap 需要满足以下三种情况：
+   * //# 1. holder 被移除
+   * //# 2. holder 是带有 payload 的更新
+   * //# 3. holder 失效但 adapter 有 StableId
+   *
    * 虽然允许保存无效的 holder，但是在 [LayoutManager.detachAndScrapAttachedViews] 方法中会将
    * [MyViewHolder.isInvalid] = true 和 [MyViewHolder.isRemoved] = false 的 holder 优先保存进
    * 二级缓存中 (但除了 [MyAdapter.hasStableIds] = true 以外，有了稳定 id 会优先一级缓存)
@@ -72,8 +79,9 @@ class MyRecycler(
    * 通常包含：
    * - 调用没有 payload 的 notifyItemChanged(int)，即 [MyViewHolder.isUpdate] = true
    *
-   * //# 在调用 notifyItemChanged(int) 时，int 对应的 holder 会被添加进该 mChangedScrap 中
-   * //# 但是对于 notifyItemChanged(int, Object) 的调用，因为有 payload，只会被添加进 mAttachedScrap 中
+   * //# holder 不带有 payload 的更新时放进 mChangedScrap
+   * 即在调用 notifyItemChanged(int) 时，int 对应的 holder 会被添加进该 mChangedScrap 中
+   * 但是对于 notifyItemChanged(int, Object) 的调用，因为有 payload，只会被添加进 mAttachedScrap 中
    *
    * /// 比较重要的几点在于：
    * /// 1. 这个 mChangedScrap 只有在预布局时才使用，正常布局是不会使用的，
@@ -111,7 +119,7 @@ class MyRecycler(
    *
    * /// 三级缓存触发的地方在 [Recycler.tryGetViewHolderForPositionByDeadline]
    */
-  private var mViewCacheExtension: ViewCacheExtension? = null
+  private var mViewCacheExtension: MyViewCacheExtension? = null
   
   // 四级缓存
   /**
@@ -145,10 +153,14 @@ class MyRecycler(
         // 如果 holder 非法，但没有被移除，并且没有 stableIds 时将直接回收，应该回收进四级缓存，而不是一级缓存
         throw IllegalArgumentException()
       }
+      //# holder 放进 mAttachedScrap 需要满足以下三种情况：
+      //# 1. holder 被移除
+      //# 2. holder 是带有 payload 的更新
+      //# 3. holder 失效但 adapter 有 StableId
       holder.setScrapContainer(this, false)
       mAttachedScrap.add(holder)
     } else {
-      // 这里一般是不带有 payload 的更新时才进入
+      //# holder 不带有 payload 的更新时放进 mChangedScrap
       holder.setScrapContainer(this, true)
       mChangedScrap.add(holder)
     }
@@ -233,4 +245,68 @@ class MyRecycler(
     }
     return mRecyclerViewPool
   }
+  
+  fun getViewForPosition(position: Int): View {
+    return tryGetViewHolderForPositionByDeadline(position, false, Long.MAX_VALUE).itemView
+  }
+  
+  /// 获取缓存 VH 或者调用 onCreate 加载 VH 的核心方法
+  private fun tryGetViewHolderForPositionByDeadline(position: Int, dryRun: Boolean, deadlineNs: Long): MyViewHolder {
+    var holder: MyViewHolder? = null
+    
+    /// 1. 如果是预布局，先从 ChangedScrap 中寻找 holder
+    if (rv.mState.mInPreLayout) {
+      holder = getChangedScrapViewForPosition(position)
+    }
+    
+    /// 2. 从 mAttachedScrap 和 mCachedViews 中寻找相同位置的 holder
+    if (holder == null) {
+      holder = getScrapOrHiddenOrCachedHolderForPosition(position, dryRun)
+      // ... 如果得到的 holder 有问题会回收然后重置 holder = null
+    }
+    
+    if (holder == null) {
+      val type = rv.mAdapter.getItemViewType(position)
+      if (rv.mAdapter.hasStableIds()) {
+        val id = rv.mAdapter.getItemId(position)
+        /// 3. 如果 Adapter 设置了 StableIds，则使用 item 的 id 再次在 mAttachedScrap 和 mCachedViews 中寻找
+        holder = getScrapOrCachedViewForId(id, type, dryRun)
+      }
+      
+      if (holder == null && mViewCacheExtension != null) {
+        /// 4. 如果设置了 mViewCacheExtension，则从第三级缓存中寻找
+        val view = mViewCacheExtension!!.getViewForPositionAndType(this, position, type)
+        if (view != null) {
+          holder = (view.layoutParams as? MyLayoutParams)?.mViewHolder
+          if (holder == null) {
+            error("如果第三级缓存的 view 中拿不到 holder，就会抛异常")
+          }
+        }
+      }
+      
+      if (holder == null) {
+        /// 5. 从第四级缓存 RecyclerViewPool 中寻找
+        holder = getRecycledViewPool().getRecycledView(type)
+      }
+      
+      if (holder == null) {
+        /// 6. 最后调用 createViewHolder 创建新的 ViewHolder
+        holder = rv.mAdapter.createViewHolder(rv, type)
+      }
+    }
+    
+    if (rv.mState.mInPreLayout && holder.isBound()) {
+      holder.mPreLayoutPosition = position
+    } else {
+      if (!holder.isBound() || holder.isUpdate() || holder.isInvalid()) {
+        // 只有 holder 未绑定或需要更新或失效时才会重新调用 onBind
+        // tryBindViewHolderByDeadline() -> mAdapter.bindViewHolder(holder, offsetPosition);
+      }
+    }
+    return holder
+  }
+  
+  private fun getChangedScrapViewForPosition(position: Int): MyViewHolder? = TODO()
+  private fun getScrapOrHiddenOrCachedHolderForPosition(position: Int, dryRun: Boolean): MyViewHolder? = TODO()
+  private fun getScrapOrCachedViewForId(id: Long, type: Int, dryRun: Boolean): MyViewHolder? = TODO()
 }

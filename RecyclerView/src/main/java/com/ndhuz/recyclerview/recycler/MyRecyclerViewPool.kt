@@ -50,4 +50,17 @@ open class MyRecyclerViewPool {
     }
     return scrapData
   }
+  
+  fun getRecycledView(viewType: Int): MyViewHolder? {
+    val scrapData = mScrap.get(viewType)
+    if (scrapData != null && scrapData.mScrapHeap.isNotEmpty()) {
+      val scrapHeap = scrapData.mScrapHeap
+      for (i in scrapHeap.size - 1 downTo 0) {
+        if (!scrapHeap[i].isAttachedToTransitionOverlay()) {
+          return scrapHeap.removeAt(i)
+        }
+      }
+    }
+    return null
+  }
 }

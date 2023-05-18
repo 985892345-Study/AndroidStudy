@@ -7,13 +7,13 @@
   - Looper
     - [ThreadLocal](ThreadLocal)
   - MessageQueue
-- [ ] Service
-- [ ] [Binder](Binder) 
 - [ ] Activity
   - 生命周期
   - 启动模式
 - [ ] Fragment
   - 生命周期
+- [ ] Service
+- [ ] [Binder](Binder) 
 - [ ] 计网
   - TCP
   - UDP
@@ -73,6 +73,7 @@
 ## 注意事项
 ### 注释
 由于注释都是同一种颜色，不好写笔记，所以我使用了 [Better Highlights](https://plugins.jetbrains.com/plugin/12895-better-highlights) 插件用于给不同的注释显示不同的颜色。
+23/5/15: Better Highlights 3.1 和 3.2 版本会导致 Flamingo|2022.2.1+ 无法打开设置，请去官网手动安装 2.10 版本
 
 我的配置如下：
 ```
@@ -80,6 +81,8 @@ Comment
 //#          FCAC00
 ///          FFD51D
 注意          FF4302
+
+并删掉官方自带的 *
 ```
 在配置成功后你的注释应该是下面这种颜色(除了代码原有的字体颜色不一样外)：
 

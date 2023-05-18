@@ -64,15 +64,10 @@ class PageAdapter(
       }
     )
     count++
-    if (count >= 1) {
-      val e = Exception()
-      android.util.Log.d("ggg", "(${Exception().stackTrace[0].run { "$fileName:$lineNumber" }}) -> " +
-        "onCreateViewHolder: count = $count   holder = ${holder.code}\n" +
-        e.stackTraceToString()
-      )
-    }
-    android.util.Log.d("ggg", "(${Exception().stackTrace[0].run { "$fileName:$lineNumber" }}) -> " +
-      "onCreate: mCacheViews = $mCacheViews")
+    android.util.Log.d(
+      "ggg", "(${Exception().stackTrace[0].run { "$fileName:$lineNumber" }}) -> " +
+        "onCreate: mCacheViews = $mCacheViews   holder = ${holder.code}\n${Exception().stackTraceToString()}"
+    )
     return holder
   }
   
@@ -80,7 +75,7 @@ class PageAdapter(
     return 10
   }
   
-  private val mCacheViews = rv.let {
+  val mCacheViews = rv.let {
     val field = RecyclerView::class.java.getDeclaredField("mRecycler")
     field.isAccessible = true
     val recycler = field.get(it)
@@ -89,15 +84,25 @@ class PageAdapter(
     field2.get(recycler)!!
   }
   
+  val mViewCacheMax
+    get() = rv.let {
+      val field = RecyclerView::class.java.getDeclaredField("mRecycler")
+      field.isAccessible = true
+      val recycler = field.get(it)
+      val field2 = Recycler::class.java.getDeclaredField("mViewCacheMax")
+      field2.isAccessible = true
+      field2.get(recycler)!!
+    }
+  
   @SuppressLint("SetTextI18n")
   override fun onBindViewHolder(holder: PageVH, position: Int) {
-    android.util.Log.d("ggg", "(${Exception().stackTrace[0].run { "$fileName:$lineNumber" }}) -> " +
-      "onBind: position = $position   holder = ${holder.code}")
     val view = holder.itemView as ViewGroup
     (view.getChildAt(0) as TextView).apply {
-      text = holder.code + "\n第 $position 页"
+      text = holder.code + "\n第 ${position + 1} 页"
     }
-    android.util.Log.d("ggg", "(${Exception().stackTrace[0].run { "$fileName:$lineNumber" }}) -> " +
-      "onBind: mCacheViews = $mCacheViews")
+    android.util.Log.d(
+      "ggg", "(${Exception().stackTrace[0].run { "$fileName:$lineNumber" }}) -> " +
+        "onBind: mCacheViews = $mCacheViews   position = $position   holder = ${holder.code}\nonBind: ${Exception().stackTraceToString()}"
+    )
   }
 }
