@@ -7,7 +7,7 @@
   - Looper
     - [ThreadLocal](ThreadLocal)
   - MessageQueue
-- [ ] Activity
+- [ ] [Activity](Activity)
   - 生命周期
   - 启动模式
 - [ ] Fragment
@@ -20,9 +20,10 @@
   - Https
 
 ### 面试常问
-- [ ] [RecyclerView](RecyclerView)
+- [x] [RecyclerView](RecyclerView)
   - 四级缓存
   - 测量与布局
+  - LinearLayoutManager
 - [ ] OkHttp
 - [ ] Retrofit
 - [ ] Glide
