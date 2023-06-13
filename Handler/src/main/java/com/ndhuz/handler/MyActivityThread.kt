@@ -2,9 +2,11 @@ package com.ndhuz.handler
 
 import com.ndhuz.handler.looper.MyLooper
 
+// https://blog.csdn.net/hzwailll/article/details/85339714
+
 /**
  *
- * https://blog.csdn.net/hzwailll/article/details/85339714
+ * [android.app.ActivityThread]
  *
  * @author 985892345
  * 2023/3/20 22:34

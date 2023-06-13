@@ -1,8 +1,9 @@
-package com.ndhzs.activity
+package com.ndhzs.activity.launchmode
 
 import android.content.Intent
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
+import com.ndhzs.activity.R
 
 class MyLaunchModeActivity : AppCompatActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {

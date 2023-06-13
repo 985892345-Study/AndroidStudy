@@ -13,9 +13,9 @@
             <option value="$PROJECT_DIR$/Activity" />
             <option value="$PROJECT_DIR$/ArrayMap" />
             <option value="$PROJECT_DIR$/Binder" />
-            <option value="$PROJECT_DIR$/FrameWork" />
             <option value="$PROJECT_DIR$/Handler" />
             <option value="$PROJECT_DIR$/RecyclerView" />
+            <option value="$PROJECT_DIR$/Service" />
             <option value="$PROJECT_DIR$/SparseArray" />
             <option value="$PROJECT_DIR$/ThreadLocal" />
             <option value="$PROJECT_DIR$/XposedDebugger" />

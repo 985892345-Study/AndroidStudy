@@ -1,4 +1,4 @@
-package com.ndhuz.framework
+package com.g985892345.service
 
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -19,6 +19,6 @@ class ExampleInstrumentedTest {
   fun useAppContext() {
     // Context of the app under test.
     val appContext = InstrumentationRegistry.getInstrumentation().targetContext
-    assertEquals("com.ndhuz.framework.test", appContext.packageName)
+    assertEquals("com.g985892345.service.test", appContext.packageName)
   }
 }

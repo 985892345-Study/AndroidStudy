@@ -16,7 +16,6 @@ dependencyResolutionManagement {
 rootProject.name = "Android-Study"
 include ':app'
 include ':Handler'
-include ':FrameWork'
 include ':ThreadLocal'
 include ':SparseArray'
 include ':ArrayMap'
@@ -24,3 +23,4 @@ include ':RecyclerView'
 include ':Binder'
 include ':XposedDebugger'
 include ':Activity'
+include ':Service'

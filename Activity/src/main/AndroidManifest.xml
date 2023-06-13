@@ -1,12 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" >
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <application>
         <activity
-            android:name=".MyLaunchModeActivity"
+            android:name=".lifecycle.LifecycleActivity2"
             android:exported="false" />
         <activity
-            android:name=".MyLifecycleActivity"
+            android:name=".lifecycle.LifecycleActivity1"
+            android:exported="false" />
+        <activity
+            android:name=".launchmode.MyLaunchModeActivity"
             android:exported="false" />
     </application>
 

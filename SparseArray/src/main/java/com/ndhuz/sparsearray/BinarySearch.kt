@@ -59,12 +59,27 @@ package com.ndhuz.sparsearray
 * 常规二分写法可以满足所有要求，记住它就可以了
 * 在判断时根据 r 紧挨 l 左边和谁不能取等来快速判断是左侧还是右侧
 *
+* ```kotlin
+* while (l <= r) {
+*   val m = (l + r) ushr 1
+*   val v = array[m]
+*   if (v < value) {
+*     l = m + 1
+*   } else {
+*     r = m - 1
+*   }
+* }
+* ```
+*
 * 比如：
 * v < value  -> [1, 2, 2, 3]  r 不能取等，l 只能取等或大于
 *                r  l
 *
 * v <= value -> [1, 2, 2, 3]  l 不能取等，r 只能取等或小于
 *                      r  l
+* 不取等的那边最后会取等，
+* 比如 if (v < value) l = m + 1;  最后 l 会取 value (如果没有的话就是大于值)
+* 所以 if (v <= value) l = m + 1; 最后 r 会取 value (如果没有的话就是小于值)
 * */
 
 /**
